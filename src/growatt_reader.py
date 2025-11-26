@@ -154,7 +154,7 @@ def read_once(cfg):
 
     # Energy balance battery power
     if pv is not None and load is not None and grid is not None:
-        batt_net = pv - load + grid
+        batt_net = pv - load - grid
         batt_charge = max(batt_net, 0)
         batt_discharge = max(-batt_net, 0)
     else:
@@ -165,10 +165,10 @@ def read_once(cfg):
     print("\n--- Inverter Snapshot ---")
     print(f"PV Input Power:        {pv} W")
     print(f"Load Power:            {load} W")
-    print(f"Grid Power:            {grid} W (positive=import)")
+    print(f"Grid Power:            {grid} W (positive=export)")
     print(f"Battery Charging:      {batt_charge} W")
     print(f"Battery Discharging:   {batt_discharge} W")
-    print(f"Battery Net Power:     {batt_net} W")
+    print(f"Battery Net Charging:  {batt_net} W")
     print(f"SOC (Inverter 1014):   {soc_inv} %")
     print(f"SOC (BMS 1086):        {soc_bms} %")
     print("-------------------------\n")
