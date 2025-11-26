@@ -259,7 +259,7 @@ def main():
 
             # Battery (energy balance)
             if pv is not None and load is not None and grid is not None:
-                net = pv - load + grid
+                net = pv - load - grid
                 charge = max(net, 0)
                 discharge = max(-net, 0)
             else:
@@ -271,7 +271,7 @@ def main():
 
             # Print summary line
             print(
-                f"[{ts}] PV={pv}W  Load={load}W  Grid={grid}W  "
+                f"[{ts}] PV={pv}W  ToLoad={load}W  ToGrid={grid}W  "
                 f"BattChg={charge}W  BattDis={discharge}W  "
                 f"SOC(inv/BMS)= {soc_inv}/{soc_bms}"
             )
