@@ -113,7 +113,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
 // ============================================================
 // Sankey 图组件
 // ============================================================
-const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 }) => {
+const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, instanceId = "default" }) => {
   const { 
     solar = 0, 
     battery_discharge = 0, 
@@ -167,13 +167,14 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 })
     gridInToBatteryIn = Math.max(0, grid_import - gridInToLoad);
   }
 
-  const nodes = [
-    { name: "Solar" },
-    { name: "Battery Out" },
-    { name: "Grid In" },
-    { name: "Battery In" },
-    { name: "Load" },
-    { name: "Grid Out" },
+  // 定义所有可能的节点（按左右顺序：输入源在前，输出在后）
+  const allNodes = [
+    { name: "Solar", side: "input" },
+    { name: "Battery Out", side: "input" },
+    { name: "Grid In", side: "input" },
+    { name: "Battery In", side: "output" },
+    { name: "Load", side: "output" },
+    { name: "Grid Out", side: "output" },
   ];
 
   const nodeColors = {
@@ -185,16 +186,41 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 })
     "Grid Out": "#34D399",
   };
 
-  const links = [];
-  const addLink = (source, target, value) => {
-    if (value > 0.001) links.push({ source, target, value });
-  };
-  addLink(0, 4, solarToLoad);
-  addLink(0, 3, solarToBatteryIn);
-  addLink(0, 5, solarToGridOut);
-  addLink(1, 4, batteryOutToLoad);
-  addLink(2, 4, gridInToLoad);
-  addLink(2, 3, gridInToBatteryIn);
+  // 构建所有可能的连接（使用节点名称，稍后转换为索引）
+  const allLinksDef = [
+    { sourceName: "Solar", targetName: "Load", value: solarToLoad },
+    { sourceName: "Solar", targetName: "Battery In", value: solarToBatteryIn },
+    { sourceName: "Solar", targetName: "Grid Out", value: solarToGridOut },
+    { sourceName: "Battery Out", targetName: "Load", value: batteryOutToLoad },
+    { sourceName: "Grid In", targetName: "Load", value: gridInToLoad },
+    { sourceName: "Grid In", targetName: "Battery In", value: gridInToBatteryIn },
+  ];
+
+  // 过滤有效的连接
+  const validLinks = allLinksDef.filter(link => link.value > 0.001);
+
+  // 找出所有被使用的节点名称
+  const usedNodeNames = new Set();
+  validLinks.forEach(link => {
+    usedNodeNames.add(link.sourceName);
+    usedNodeNames.add(link.targetName);
+  });
+
+  // 按原始顺序过滤出被使用的节点
+  const nodes = allNodes.filter(n => usedNodeNames.has(n.name));
+
+  // 创建节点名称到索引的映射
+  const nodeIndexMap = {};
+  nodes.forEach((n, i) => {
+    nodeIndexMap[n.name] = i;
+  });
+
+  // 转换连接的source/target为新的索引
+  const links = validLinks.map(link => ({
+    source: nodeIndexMap[link.sourceName],
+    target: nodeIndexMap[link.targetName],
+    value: link.value,
+  }));
 
   if (links.length === 0) {
     return (
@@ -260,9 +286,20 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 })
       linkWidth, index, payload,
     } = props;
 
+    // 检查坐标是否有效
+    if (sourceX === undefined || sourceY === undefined || 
+        targetX === undefined || targetY === undefined ||
+        linkWidth === undefined || linkWidth < 0.1) {
+      return null;
+    }
+
     const sourceName = payload?.source?.name ?? "unknown";
     const color = nodeColors[sourceName] || "#888";
-    const gradientId = `sankey-gradient-${index}`;
+    const gradientId = `sankey-grad-${instanceId}-${index}-${sourceName.replace(/\s/g, '')}`;
+
+    // 确保控制点有效
+    const ctrlX1 = sourceControlX ?? (sourceX + (targetX - sourceX) / 3);
+    const ctrlX2 = targetControlX ?? (targetX - (targetX - sourceX) / 3);
 
     return (
       <Layer>
@@ -273,19 +310,25 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 })
           </linearGradient>
         </defs>
         <path
-          d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+          d={`M${sourceX},${sourceY} C${ctrlX1},${sourceY} ${ctrlX2},${targetY} ${targetX},${targetY}`}
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth={linkWidth}
+          strokeWidth={Math.max(linkWidth, 2)}
           strokeOpacity={0.9}
         />
       </Layer>
     );
   };
 
+  // 生成唯一key，确保数据变化时重新渲染
+  const nodeNames = nodes.map(n => n.name).join(',');
+  const linkInfo = links.map(l => `${l.source}-${l.target}-${l.value.toFixed(3)}`).join('|');
+  const sankeyKey = `${instanceId}-${nodeNames}-${linkInfo}`;
+
   return (
     <div style={{ width: "100%", height, overflowX: "auto" }}>
       <Sankey
+        key={sankeyKey}
         width={750}
         height={height}
         data={{ nodes, links }}
@@ -370,7 +413,7 @@ const RealtimeSection = ({ currentData, error }) => {
         {/* 右侧：Sankey图 - 占2列 */}
         <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-4">
           <h3 className="text-gray-400 text-sm font-medium mb-2">能量流向</h3>
-          <SankeyFlow data={currentData} height={320} />
+          <SankeyFlow data={currentData} height={320} instanceId="realtime" />
         </div>
       </div>
     </SectionContainer>
@@ -558,6 +601,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
                 }}
                 unit="kWh"
                 height={420}
+                instanceId="history"
               />
             </div>
           )}
