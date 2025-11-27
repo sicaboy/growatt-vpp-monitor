@@ -4,3 +4,5 @@ growatt_log.csv
 api_server.log
 api_server.pid
 node_modules/
+logs/*
+!logs/.gitkeep

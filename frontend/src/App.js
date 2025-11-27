@@ -17,11 +17,33 @@ const formatDate = (date) => {
 const getToday = () => formatDate(new Date());
 
 // ============================================================
+// 模块标题组件
+// ============================================================
+const SectionTitle = ({ icon, title, subtitle }) => (
+  <div className="mb-4">
+    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+      <span>{icon}</span>
+      <span>{title}</span>
+    </h2>
+    {subtitle && <p className="text-gray-400 text-sm mt-1">{subtitle}</p>}
+  </div>
+);
+
+// ============================================================
+// 模块容器组件
+// ============================================================
+const SectionContainer = ({ children, className = "" }) => (
+  <div className={`bg-gray-900/50 rounded-2xl p-6 border border-gray-800 ${className}`}>
+    {children}
+  </div>
+);
+
+// ============================================================
 // 日期选择器组件
 // ============================================================
 const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChange, onApply }) => {
   return (
-    <div className="flex flex-wrap items-center gap-3 bg-gray-800 rounded-lg p-3">
+    <div className="flex flex-wrap items-center gap-3">
       <div className="flex items-center gap-2">
         <label className="text-gray-400 text-sm">开始:</label>
         <input
@@ -70,13 +92,28 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
       >
         最近7天
       </button>
+      <button
+        onClick={() => {
+          const today = new Date();
+          const monthAgo = new Date(today);
+          monthAgo.setDate(monthAgo.getDate() - 30);
+          onStartDateChange(formatDate(monthAgo));
+          onEndDateChange(formatDate(today));
+          setTimeout(onApply, 0);
+        }}
+        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1.5 rounded text-sm transition-colors"
+      >
+        最近30天
+      </button>
     </div>
   );
 };
 
 
-// --------- 用这个替换旧的 SankeyFlow 整个函数 ----------
-const SankeyFlow = ({ data }) => {
+// ============================================================
+// Sankey 图组件
+// ============================================================
+const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 350 }) => {
   const { 
     solar = 0, 
     battery_discharge = 0, 
@@ -90,16 +127,45 @@ const SankeyFlow = ({ data }) => {
   const batteryOut = battery_discharge > 0.001 ? battery_discharge : Math.max(0, -battery_net);
   const batteryIn = battery_charge > 0.001 ? battery_charge : Math.max(0, battery_net);
 
-  const solarToLoad = Math.min(solar, load);
-  const solarToBatteryIn = Math.min(Math.max(0, solar - solarToLoad), batteryIn);
-  const solarToGridOut = Math.max(0, solar - solarToLoad - solarToBatteryIn);
+  // 总输入和总输出
+  const totalInput = solar + batteryOut + grid_import;
+  const totalOutput = load + batteryIn + grid_export;
 
-  const remainingLoadAfterSolar = Math.max(0, load - solarToLoad);
-  const batteryOutToLoad = Math.min(batteryOut, remainingLoadAfterSolar);
+  // 对于历史统计数据，使用比例分配而不是优先级分配
+  // 这样更准确地反映实际能量流向
+  
+  let solarToLoad, solarToBatteryIn, solarToGridOut;
+  let batteryOutToLoad;
+  let gridInToLoad, gridInToBatteryIn;
 
-  const remainingLoadAfterBattery = Math.max(0, remainingLoadAfterSolar - batteryOutToLoad);
-  const gridInToLoad = Math.min(grid_import, remainingLoadAfterBattery);
-  const gridInToBatteryIn = Math.max(0, grid_import - gridInToLoad);
+  if (totalInput > 0.001 && totalOutput > 0.001) {
+    // 按比例分配：每个输入源按输出的比例分配
+    const loadRatio = load / totalOutput;
+    const batteryInRatio = batteryIn / totalOutput;
+    const gridOutRatio = grid_export / totalOutput;
+
+    solarToLoad = solar * loadRatio;
+    solarToBatteryIn = solar * batteryInRatio;
+    solarToGridOut = solar * gridOutRatio;
+
+    batteryOutToLoad = batteryOut * loadRatio;
+    // batteryOut 一般不会去充电或卖电，但如果有剩余也按比例
+    
+    gridInToLoad = grid_import * loadRatio;
+    gridInToBatteryIn = grid_import * batteryInRatio;
+  } else {
+    // Fallback: 原来的优先级逻辑（用于实时数据）
+    solarToLoad = Math.min(solar, load);
+    solarToBatteryIn = Math.min(Math.max(0, solar - solarToLoad), batteryIn);
+    solarToGridOut = Math.max(0, solar - solarToLoad - solarToBatteryIn);
+
+    const remainingLoadAfterSolar = Math.max(0, load - solarToLoad);
+    batteryOutToLoad = Math.min(batteryOut, remainingLoadAfterSolar);
+
+    const remainingLoadAfterBattery = Math.max(0, remainingLoadAfterSolar - batteryOutToLoad);
+    gridInToLoad = Math.min(grid_import, remainingLoadAfterBattery);
+    gridInToBatteryIn = Math.max(0, grid_import - gridInToLoad);
+  }
 
   const nodes = [
     { name: "Solar" },
@@ -116,7 +182,7 @@ const SankeyFlow = ({ data }) => {
     "Grid In": "#60A5FA",
     "Battery In": "#22D3EE",
     Load: "#A78BFA",
-    "Grid Out": "#60A5FA",
+    "Grid Out": "#34D399",
   };
 
   const links = [];
@@ -132,149 +198,68 @@ const SankeyFlow = ({ data }) => {
 
   if (links.length === 0) {
     return (
-      <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-        <h2 className="text-xl font-bold text-white mb-4">⚡ Energy Flow (实时)</h2>
-        <div className="flex items-center justify-center h-64 text-gray-500">
-          🌙 No energy flow
-        </div>
+      <div className="flex items-center justify-center text-gray-500" style={{ height }}>
+        🌙 No energy flow
       </div>
     );
   }
 
-  // 兼容不同版本的 node payload -> 返回一个“中心点”对象或 null
-  const getNodeCenter = (n) => {
-    if (!n) return null;
+  // 为每个节点预计算百分比（基于原始数据）
+  const nodePercentages = {
+    "Solar": totalInput > 0 ? (solar / totalInput * 100).toFixed(1) : "0.0",
+    "Grid In": totalInput > 0 ? (grid_import / totalInput * 100).toFixed(1) : "0.0",
+    "Battery Out": totalInput > 0 ? (batteryOut / totalInput * 100).toFixed(1) : "0.0",
+    "Load": totalOutput > 0 ? (load / totalOutput * 100).toFixed(1) : "0.0",
+    "Grid Out": totalOutput > 0 ? (grid_export / totalOutput * 100).toFixed(1) : "0.0",
+    "Battery In": totalOutput > 0 ? (batteryIn / totalOutput * 100).toFixed(1) : "0.0",
+  };
 
-    // common patterns:
-    // - { x, y, width, height, dy }
-    // - { x0, x1, y0, y1 } (d3 style)
-    // - { x, y, dx, dy }
-    const x0 = n.x0 ?? n.x ?? (n.left ?? null);
-    const x1 = n.x1 ?? (n.x != null && (n.width ?? n.dx) != null ? (n.x + (n.width ?? n.dx)) : null) ?? (n.right ?? null);
-    const y0 = n.y0 ?? n.y ?? (n.top ?? null);
-    const y1 = n.y1 ?? (n.y != null && (n.height ?? n.dy) != null ? (n.y + (n.height ?? n.dy)) : null) ?? (n.bottom ?? null);
-
-    // center x
-    let cx = null;
-    if (x1 != null) cx = x1; // prefer the right edge (so link starts at node right)
-    else if (x0 != null) cx = x0 + ((n.width ?? n.dx ?? 0) / 2);
-    // center y
-    let cy = null;
-    if (y0 != null && y1 != null) cy = (y0 + y1) / 2;
-    else if (y0 != null) cy = y0 + ((n.height ?? n.dy ?? 0) / 2);
-
-    if (cx == null || cy == null) return null;
-    return { cx, cy, left: x0, right: x1, top: y0, bottom: y1 };
+  // 为每个节点预计算原始值（用于显示）
+  const nodeValues = {
+    "Solar": solar,
+    "Grid In": grid_import,
+    "Battery Out": batteryOut,
+    "Load": load,
+    "Grid Out": grid_export,
+    "Battery In": batteryIn,
   };
 
   const CustomNode = (props) => {
     const { x, y, width, height } = props;
-    // 兼容 node/payload/props 多种形式
     const node = props.node ?? props.payload ?? (props?.payload?.node) ?? null;
-    // 如果上面没拿到，部分版本会把 name/value 直接放在 props（极少见），兜底：
     const maybeName = node?.name ?? props.name ?? null;
     if (!maybeName) return null;
 
     const name = node?.name ?? props.name;
-    const value = node?.value ?? props.value ?? 0;
     const color = nodeColors[name] || "#888";
+    
+    // 使用原始数据的值和百分比
+    const displayValue = nodeValues[name] ?? 0;
+    const percentage = nodePercentages[name] ?? "0.0";
 
     return (
       <Layer>
         <Rectangle x={x} y={y} width={width} height={height} fill={color} fillOpacity={0.9} rx={6} ry={6} />
-        <text x={x + width / 2} y={y + height / 2 - 8} textAnchor="middle" fill="#1a1a2e" fontSize={12} fontWeight="bold">
+        <text x={x + width / 2} y={y + height / 2 - 12} textAnchor="middle" fill="#F3F4F6" fontSize={11} fontWeight="bold">
           {name}
         </text>
-        <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="#1a1a2e" fontSize={14} fontWeight="bold">
-          {(value || 0).toFixed(2)} kW
+        <text x={x + width / 2} y={y + height / 2 + 4} textAnchor="middle" fill="#FFFFFF" fontSize={13} fontWeight="bold">
+          {displayValue.toFixed(2)} {unit}
+        </text>
+        <text x={x + width / 2} y={y + height / 2 + 20} textAnchor="middle" fill="#E5E7EB" fontSize={10}>
+          ({percentage}%)
         </text>
       </Layer>
     );
   };
 
-  // const CustomLink = (props) => {
-  //   console.log('Sankey link props:', props);
-  //   // 先尝试从 props 解构常见字段
-  //   let {
-  //     source, target,
-  //     sourceX, sourceY, targetX, targetY,
-  //     linkWidth, index, payload
-  //   } = props;
-
-  //   // 不同版本字段适配：sourceNode/targetNode / payload.source/payload.target / sourceX/sourceY
-  //   const sourceNode = props.sourceNode ?? source ?? payload?.source ?? payload?.sourceNode ?? null;
-  //   const targetNode = props.targetNode ?? target ?? payload?.target ?? payload?.targetNode ?? null;
-
-  //   // 情况1: 老版本直接给 XY（sourceX/sourceY）
-  //   const hasXY = (sourceX !== undefined && sourceY !== undefined && targetX !== undefined && targetY !== undefined);
-
-  //   let sourcePos = null;
-  //   let targetPos = null;
-
-  //   if (hasXY) {
-  //     sourcePos = { cx: sourceX, cy: sourceY };
-  //     targetPos = { cx: targetX, cy: targetY };
-  //   } else {
-  //     // 通过 node 对象推算
-  //     sourcePos = getNodeCenter(sourceNode);
-  //     targetPos = getNodeCenter(targetNode);
-  //   }
-
-  //   // 如果依然拿不到坐标，就放弃渲染这个 link（布局尚未完成）
-  //   if (!sourcePos || !targetPos) {
-  //     return null;
-  //   }
-
-  //   // 颜色与渐变 id
-  //   const sourceName = (sourceNode && (sourceNode.name ?? sourceNode.payload?.name)) || "unknown";
-  //   const color = nodeColors[sourceName] || "#888";
-  //   const gid = `sankey-link-grad-${index}`;
-
-  //   // linkWidth 兼容：有些版本传入的是 linkWidth，有些放在 payload.value
-  //   const strokeW = linkWidth || Math.max(2, (payload?.value ?? props.value ?? 6));
-
-  //   // 控制点偏移：根据节点间距自适应（不硬编码太大）
-  //   const dx = Math.max(30, Math.abs(targetPos.cx - sourcePos.cx) / 3);
-
-  //   return (
-  //     <Layer>
-  //       <defs>
-  //         <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">
-  //           <stop offset="0%" stopColor={color} stopOpacity={0.9} />
-  //           <stop offset="100%" stopColor={color} stopOpacity={0.2} />
-  //         </linearGradient>
-  //       </defs>
-
-  //       <path
-  //         d={`
-  //           M${sourcePos.cx},${sourcePos.cy}
-  //           C${sourcePos.cx + dx},${sourcePos.cy}
-  //            ${targetPos.cx - dx},${targetPos.cy}
-  //            ${targetPos.cx},${targetPos.cy}
-  //         `}
-  //         fill="none"
-  //         stroke={`url(#${gid})`}
-  //         strokeWidth={strokeW}
-  //         strokeOpacity={0.9}
-  //       />
-  //     </Layer>
-  //   );
-  // };
   const CustomLink = (props) => {
-    console.log('Sankey link props:', props);
     const {
-      sourceX,
-      sourceY,
-      targetX,
-      targetY,
-      sourceControlX,
-      targetControlX,
-      linkWidth,
-      index,
-      payload,
+      sourceX, sourceY, targetX, targetY,
+      sourceControlX, targetControlX,
+      linkWidth, index, payload,
     } = props;
 
-    // 颜色取自 source 节点
     const sourceName = payload?.source?.name ?? "unknown";
     const color = nodeColors[sourceName] || "#888";
     const gradientId = `sankey-gradient-${index}`;
@@ -287,14 +272,8 @@ const SankeyFlow = ({ data }) => {
             <stop offset="100%" stopColor={color} stopOpacity={0.2} />
           </linearGradient>
         </defs>
-
         <path
-          d={`
-            M${sourceX},${sourceY}
-            C${sourceControlX},${sourceY}
-            ${targetControlX},${targetY}
-            ${targetX},${targetY}
-          `}
+          d={`M${sourceX},${sourceY} C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
           fill="none"
           stroke={`url(#${gradientId})`}
           strokeWidth={linkWidth}
@@ -304,140 +283,310 @@ const SankeyFlow = ({ data }) => {
     );
   };
 
-
   return (
-    <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <h2 className="text-xl font-bold text-white mb-4">⚡ Energy Flow (实时)</h2>
-      <div style={{ width: "100%", height: 400 }}>
-        <Sankey
-          width={700}
-          height={400}
-          data={{ nodes, links }}
-          node={<CustomNode />}
-          link={<CustomLink />}
-          nodePadding={40}
-          nodeWidth={100}
-          margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-        />
-      </div>
+    <div style={{ width: "100%", height }}>
+      <Sankey
+        width={650}
+        height={height}
+        data={{ nodes, links }}
+        node={<CustomNode />}
+        link={<CustomLink />}
+        nodePadding={35}
+        nodeWidth={90}
+        margin={{ top: 15, right: 15, bottom: 15, left: 15 }}
+      />
     </div>
   );
 };
 
 
 // ============================================================
-// 每日统计卡片组件
+// 状态卡片组件
 // ============================================================
-const DailySummaryCard = ({ data, isLoading }) => {
-  if (isLoading) {
-    return (
-      <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-        <h2 className="text-xl font-bold text-white mb-4">📊 每日统计 (kWh)</h2>
-        <div className="text-gray-400 text-center py-8">加载中...</div>
-      </div>
-    );
-  }
+const StatCard = ({ title, value, unit, icon, color, subtitle }) => {
+  const colorClasses = {
+    yellow: 'from-yellow-500 to-orange-500',
+    cyan: 'from-cyan-500 to-blue-500',
+    'cyan-in': 'from-cyan-600 to-cyan-400',
+    'cyan-out': 'from-teal-500 to-cyan-500',
+    purple: 'from-purple-500 to-pink-500',
+    blue: 'from-blue-500 to-indigo-500',
+    'blue-in': 'from-blue-600 to-blue-400',
+    'blue-out': 'from-indigo-500 to-blue-500',
+    green: 'from-green-500 to-emerald-500',
+    'green-out': 'from-emerald-500 to-green-400',
+  };
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-        <h2 className="text-xl font-bold text-white mb-4">📊 每日统计 (kWh)</h2>
-        <div className="text-gray-400 text-center py-8">暂无数据</div>
-      </div>
-    );
-  }
+  return (
+    <div className={`bg-gradient-to-br ${colorClasses[color] || colorClasses.blue} rounded-xl p-3 shadow-lg`}>
+      <p className="text-white/80 text-xs font-medium">{icon} {title}</p>
+      {subtitle && <p className="text-white/60 text-xs">{subtitle}</p>}
+      <p className="text-white text-xl font-bold mt-1">
+        {typeof value === 'number' ? value.toFixed(2) : value} <span className="text-sm">{unit}</span>
+      </p>
+    </div>
+  );
+};
 
-  // 单天数据
-  if (data.length === 1) {
-    const d = data[0];
-    return (
-      <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-        <h2 className="text-xl font-bold text-white mb-4">📊 {d.date} 统计 (kWh)</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-yellow-500/20 rounded-lg p-4">
-            <div className="text-yellow-400 text-sm">☀️ Solar</div>
-            <div className="text-white text-2xl font-bold">{d.solar_kwh?.toFixed(2) || '0.00'}</div>
+
+// ============================================================
+// 模块一：实时监控
+// ============================================================
+const RealtimeSection = ({ currentData, error }) => {
+  return (
+    <SectionContainer>
+      <SectionTitle 
+        icon="⚡" 
+        title="实时监控" 
+        subtitle={currentData.timestamp ? `最后更新: ${new Date(currentData.timestamp).toLocaleTimeString('zh-CN')}` : '等待数据...'}
+      />
+      
+      {error && (
+        <div className="mb-4 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+          ⚠️ {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 左侧：数据卡片 */}
+        <div className="space-y-4">
+          <h3 className="text-gray-400 text-sm font-medium">功率数据 (kW)</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <StatCard title="Solar" value={currentData.solar} unit="kW" icon="☀️" color="yellow" />
+            <StatCard title="Load" value={currentData.load} unit="kW" icon="🏠" color="purple" />
+            <StatCard title="Battery In" subtitle="充电" value={currentData.battery_charge} unit="kW" icon="🔋↓" color="cyan-in" />
+            <StatCard title="Battery Out" subtitle="放电" value={currentData.battery_discharge} unit="kW" icon="🔋↑" color="cyan-out" />
+            <StatCard title="Grid In" subtitle="买电" value={currentData.grid_import} unit="kW" icon="⬇️" color="blue-in" />
+            <StatCard title="Grid Out" subtitle="卖电" value={currentData.grid_export} unit="kW" icon="⬆️" color="green-out" />
           </div>
-          <div className="bg-purple-500/20 rounded-lg p-4">
-            <div className="text-purple-400 text-sm">🏠 Load</div>
-            <div className="text-white text-2xl font-bold">{d.load_kwh?.toFixed(2) || '0.00'}</div>
-          </div>
-          <div className="bg-cyan-500/20 rounded-lg p-4">
-            <div className="text-cyan-400 text-sm">🔋 Charge</div>
-            <div className="text-white text-2xl font-bold">{d.battery_charge_kwh?.toFixed(2) || '0.00'}</div>
-          </div>
-          <div className="bg-cyan-500/20 rounded-lg p-4">
-            <div className="text-cyan-400 text-sm">🔋 Discharge</div>
-            <div className="text-white text-2xl font-bold">{d.battery_discharge_kwh?.toFixed(2) || '0.00'}</div>
-          </div>
-          <div className="bg-blue-500/20 rounded-lg p-4">
-            <div className="text-blue-400 text-sm">⬇️ Grid Import</div>
-            <div className="text-white text-2xl font-bold">{d.grid_import_kwh?.toFixed(2) || '0.00'}</div>
-          </div>
-          <div className="bg-green-500/20 rounded-lg p-4">
-            <div className="text-green-400 text-sm">⬆️ Grid Export</div>
-            <div className="text-white text-2xl font-bold">{d.grid_export_kwh?.toFixed(2) || '0.00'}</div>
+          
+          <h3 className="text-gray-400 text-sm font-medium mt-4">电池状态</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard title="SOC (INV)" value={currentData.soc_inv} unit="%" icon="📊" color="green" />
+            <StatCard title="SOC (BMS)" value={currentData.soc_bms} unit="%" icon="📈" color="green" />
           </div>
         </div>
-      </div>
-    );
-  }
 
-  // 多天数据 - 柱状图
-  const chartData = data.map(d => ({
+        {/* 右侧：Sankey图 */}
+        <div className="bg-gray-800/50 rounded-xl p-4">
+          <h3 className="text-gray-400 text-sm font-medium mb-2">能量流向</h3>
+          <SankeyFlow data={currentData} height={300} />
+        </div>
+      </div>
+    </SectionContainer>
+  );
+};
+
+
+// ============================================================
+// 模块二：历史统计
+// ============================================================
+const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDateChange, onEndDateChange, onApply }) => {
+  const [viewMode, setViewMode] = useState('chart');
+  
+  // 当数据变化时，多天默认显示柱状图，单天默认显示sankey
+  useEffect(() => {
+    if (dailyData.length === 1) {
+      setViewMode('sankey');
+    } else if (dailyData.length > 1) {
+      setViewMode('chart');
+    }
+  }, [dailyData.length]);
+
+  // 计算汇总
+  const totals = dailyData.reduce((acc, d) => ({
+    solar: acc.solar + (d.solar_kwh || 0),
+    load: acc.load + (d.load_kwh || 0),
+    battery_charge: acc.battery_charge + (d.battery_charge_kwh || 0),
+    battery_discharge: acc.battery_discharge + (d.battery_discharge_kwh || 0),
+    grid_import: acc.grid_import + (d.grid_import_kwh || 0),
+    grid_export: acc.grid_export + (d.grid_export_kwh || 0),
+  }), { solar: 0, load: 0, battery_charge: 0, battery_discharge: 0, grid_import: 0, grid_export: 0 });
+
+  const chartData = dailyData.map(d => ({
     date: d.date?.slice(5) || '',
     solar: d.solar_kwh || 0,
     load: d.load_kwh || 0,
     gridExport: d.grid_export_kwh || 0,
     gridImport: d.grid_import_kwh || 0,
+    batteryCharge: d.battery_charge_kwh || 0,
+    batteryDischarge: d.battery_discharge_kwh || 0,
   }));
 
-  return (
-    <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <h2 className="text-xl font-bold text-white mb-4">📊 每日统计 (kWh)</h2>
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis dataKey="date" stroke="#9CA3AF" />
-          <YAxis stroke="#9CA3AF" />
-          <Tooltip
-            contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
-            labelStyle={{ color: '#F3F4F6' }}
-          />
-          <Legend />
-          <Bar dataKey="solar" fill="#FCD34D" name="Solar" />
-          <Bar dataKey="load" fill="#A78BFA" name="Load" />
-          <Bar dataKey="gridExport" fill="#34D399" name="Grid Export" />
-          <Bar dataKey="gridImport" fill="#60A5FA" name="Grid Import" />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-};
-
-// ============================================================
-// 状态卡片组件
-// ============================================================
-const StatCard = ({ title, value, unit, icon, color }) => {
-  const colorClasses = {
-    yellow: 'from-yellow-500 to-orange-500',
-    cyan: 'from-cyan-500 to-blue-500',
-    purple: 'from-purple-500 to-pink-500',
-    blue: 'from-blue-500 to-indigo-500',
-    green: 'from-green-500 to-emerald-500',
-  };
+  const dateRangeText = startDate === endDate ? startDate : `${startDate} ~ ${endDate}`;
 
   return (
-    <div className={`bg-gradient-to-br ${colorClasses[color]} rounded-xl p-4 shadow-lg`}>
-      <div>
-        <p className="text-white/80 text-sm font-medium">{icon} {title}</p>
-        <p className="text-white text-2xl font-bold mt-1">
-          {typeof value === 'number' ? value.toFixed(2) : value} <span className="text-lg">{unit}</span>
-        </p>
+    <SectionContainer>
+      <SectionTitle 
+        icon="📊" 
+        title="历史统计" 
+        subtitle={`查询范围: ${dateRangeText}`}
+      />
+
+      {/* 日期选择器 */}
+      <div className="mb-6">
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={onStartDateChange}
+          onEndDateChange={onEndDateChange}
+          onApply={onApply}
+        />
       </div>
-    </div>
+
+      {isLoading ? (
+        <div className="text-gray-400 text-center py-12">加载中...</div>
+      ) : !dailyData || dailyData.length === 0 ? (
+        <div className="text-gray-400 text-center py-12">暂无数据</div>
+      ) : (
+        <>
+          {/* 汇总数据卡片 */}
+          <div className="mb-6">
+            <h3 className="text-gray-400 text-sm font-medium mb-3">
+              {dailyData.length === 1 ? '当日统计 (kWh)' : `${dailyData.length}天汇总 (kWh)`}
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="bg-yellow-500/20 rounded-lg p-3">
+                <div className="text-yellow-400 text-xs">☀️ Solar</div>
+                <div className="text-white text-xl font-bold">{totals.solar.toFixed(2)}</div>
+              </div>
+              <div className="bg-purple-500/20 rounded-lg p-3">
+                <div className="text-purple-400 text-xs">🏠 Load</div>
+                <div className="text-white text-xl font-bold">{totals.load.toFixed(2)}</div>
+              </div>
+              <div className="bg-cyan-500/20 rounded-lg p-3">
+                <div className="text-cyan-400 text-xs">🔋↓ Charge</div>
+                <div className="text-white text-xl font-bold">{totals.battery_charge.toFixed(2)}</div>
+              </div>
+              <div className="bg-cyan-500/20 rounded-lg p-3">
+                <div className="text-cyan-400 text-xs">🔋↑ Discharge</div>
+                <div className="text-white text-xl font-bold">{totals.battery_discharge.toFixed(2)}</div>
+              </div>
+              <div className="bg-blue-500/20 rounded-lg p-3">
+                <div className="text-blue-400 text-xs">⬇️ Grid Import</div>
+                <div className="text-white text-xl font-bold">{totals.grid_import.toFixed(2)}</div>
+              </div>
+              <div className="bg-green-500/20 rounded-lg p-3">
+                <div className="text-green-400 text-xs">⬆️ Grid Export</div>
+                <div className="text-white text-xl font-bold">{totals.grid_export.toFixed(2)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 视图切换按钮 */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-gray-400 text-sm font-medium">
+              {dailyData.length > 1 ? '详细数据' : '能量分布'}
+            </h3>
+            <div className="flex gap-2">
+              {dailyData.length > 1 && (
+                <button
+                  onClick={() => setViewMode('chart')}
+                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                    viewMode === 'chart' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  📊 柱状图
+                </button>
+              )}
+              <button
+                onClick={() => setViewMode('sankey')}
+                className={`px-3 py-1.5 rounded text-sm transition-colors ${
+                  viewMode === 'sankey' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                ⚡ 能量流向
+              </button>
+            </div>
+          </div>
+
+          {/* 柱状图（多天且选择chart时显示） */}
+          {dailyData.length > 1 && viewMode === 'chart' && (
+            <div className="bg-gray-800/50 rounded-xl p-4">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="date" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    labelStyle={{ color: '#F3F4F6' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="solar" fill="#FCD34D" name="Solar" />
+                  <Bar dataKey="load" fill="#A78BFA" name="Load" />
+                  <Bar dataKey="gridExport" fill="#34D399" name="Grid Export" />
+                  <Bar dataKey="gridImport" fill="#60A5FA" name="Grid Import" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Sankey图（选择sankey时显示） */}
+          {viewMode === 'sankey' && (
+            <div className="bg-gray-800/50 rounded-xl p-4">
+              <SankeyFlow 
+                data={{
+                  solar: totals.solar,
+                  load: totals.load,
+                  battery_charge: totals.battery_charge,
+                  battery_discharge: totals.battery_discharge,
+                  grid_import: totals.grid_import,
+                  grid_export: totals.grid_export,
+                  battery_net: totals.battery_charge - totals.battery_discharge,
+                }}
+                unit="kWh"
+                height={350}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </SectionContainer>
   );
 };
+
+
+// ============================================================
+// 模块三：曲线图
+// ============================================================
+const ChartSection = ({ historicalData, startDate, endDate }) => {
+  const dateRangeText = startDate === endDate ? startDate : `${startDate} ~ ${endDate}`;
+
+  return (
+    <SectionContainer>
+      <SectionTitle 
+        icon="📈" 
+        title="功率曲线" 
+        subtitle={`时间范围: ${dateRangeText} | 数据点: ${historicalData.length}`}
+      />
+
+      {historicalData.length === 0 ? (
+        <div className="text-gray-400 text-center py-12">暂无数据</div>
+      ) : (
+        <div className="bg-gray-800/50 rounded-xl p-4">
+          <ResponsiveContainer width="100%" height={350}>
+            <LineChart data={historicalData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis dataKey="time" stroke="#9CA3AF" fontSize={11} />
+              <YAxis stroke="#9CA3AF" />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                labelStyle={{ color: '#F3F4F6' }}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="solar" stroke="#FCD34D" strokeWidth={2} dot={false} name="Solar (kW)" />
+              <Line type="monotone" dataKey="load" stroke="#A78BFA" strokeWidth={2} dot={false} name="Load (kW)" />
+              <Line type="monotone" dataKey="battery" stroke="#22D3EE" strokeWidth={2} dot={false} name="Battery (kW)" />
+              <Line type="monotone" dataKey="grid" stroke="#60A5FA" strokeWidth={2} dot={false} name="Grid (kW)" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </SectionContainer>
+  );
+};
+
 
 // ============================================================
 // 主 Dashboard 组件
@@ -457,6 +606,7 @@ function App() {
   const [startDate, setStartDate] = useState(getToday());
   const [endDate, setEndDate] = useState(getToday());
 
+  // 实时数据轮询
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -486,6 +636,7 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // 获取每日统计数据
   const fetchDailyRange = useCallback(async () => {
     setDailyLoading(true);
     try {
@@ -508,6 +659,7 @@ function App() {
     }
   }, [startDate, endDate]);
 
+  // 获取历史曲线数据
   const fetchHistoryRange = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/api/history/range?start_date=${startDate}&end_date=${endDate}&limit=300`);
@@ -531,17 +683,20 @@ function App() {
     }
   }, [startDate, endDate]);
 
+  // 初始加载
   useEffect(() => {
     fetchDailyRange();
   }, [fetchDailyRange]);
 
+  // 查询按钮处理
   const handleApply = () => {
     fetchDailyRange();
     fetchHistoryRange();
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-4 md:p-6">
+      {/* 头部 */}
       <div className="max-w-7xl mx-auto mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
@@ -551,33 +706,19 @@ function App() {
             <span className={`px-3 py-1 rounded-full text-sm ${currentData.connected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
               {currentData.connected ? '● 已连接' : '○ 未连接'}
             </span>
-            {currentData.timestamp && (
-              <span className="text-gray-400 text-sm">
-                更新: {new Date(currentData.timestamp).toLocaleTimeString('zh-CN')}
-              </span>
-            )}
           </div>
         </div>
-        {error && (
-          <div className="mt-2 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
-            ⚠️ {error}
-          </div>
-        )}
       </div>
 
+      {/* 三个模块 */}
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <StatCard title="Solar" value={currentData.solar} unit="kW" icon="☀️" color="yellow" />
-          <StatCard title="Load" value={currentData.load} unit="kW" icon="🏠" color="purple" />
-          <StatCard title="Battery" value={currentData.battery_net} unit="kW" icon="🔋" color="cyan" />
-          <StatCard title="Grid" value={currentData.grid_export - currentData.grid_import} unit="kW" icon="🔌" color="blue" />
-          <StatCard title="SOC (INV)" value={currentData.soc_inv} unit="%" icon="📊" color="green" />
-          <StatCard title="SOC (BMS)" value={currentData.soc_bms} unit="%" icon="📈" color="green" />
-        </div>
+        {/* 模块一：实时监控 */}
+        <RealtimeSection currentData={currentData} error={error} />
 
-        <SankeyFlow data={currentData} />
-
-        <DateRangePicker
+        {/* 模块二：历史统计 */}
+        <StatisticsSection 
+          dailyData={dailyData}
+          isLoading={dailyLoading}
           startDate={startDate}
           endDate={endDate}
           onStartDateChange={setStartDate}
@@ -585,29 +726,15 @@ function App() {
           onApply={handleApply}
         />
 
-        <DailySummaryCard data={dailyData} isLoading={dailyLoading} />
-
-        <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-          <h2 className="text-xl font-bold text-white mb-4">📈 Power History (kW)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={historicalData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="time" stroke="#9CA3AF" />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
-                labelStyle={{ color: '#F3F4F6' }}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="solar" stroke="#FCD34D" strokeWidth={2} dot={false} name="Solar" />
-              <Line type="monotone" dataKey="load" stroke="#A78BFA" strokeWidth={2} dot={false} name="Load" />
-              <Line type="monotone" dataKey="battery" stroke="#22D3EE" strokeWidth={2} dot={false} name="Battery" />
-              <Line type="monotone" dataKey="grid" stroke="#60A5FA" strokeWidth={2} dot={false} name="Grid" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        {/* 模块三：曲线图 */}
+        <ChartSection 
+          historicalData={historicalData}
+          startDate={startDate}
+          endDate={endDate}
+        />
       </div>
 
+      {/* 底部 */}
       <div className="max-w-7xl mx-auto mt-8 text-center text-gray-500 text-sm">
         Growatt Solar Monitor | API: {API_BASE}
       </div>

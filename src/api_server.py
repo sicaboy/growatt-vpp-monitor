@@ -2,12 +2,18 @@
 """
 Flask API server for Growatt Solar Monitor
 Provides REST endpoints for real-time and historical data
+
+Features:
+- Monthly CSV archiving (persistent storage)
+- Automatic multi-file query support
+- Real-time Modbus polling
 """
 
 import os
 import json
 import time
 import csv
+import glob
 from datetime import datetime, timedelta
 from threading import Thread, Lock
 from flask import Flask, jsonify, request
@@ -31,7 +37,8 @@ DEFAULT_CONFIG = {
     },
     "polling_interval": 5,
     "history_size": 1000,
-    "log_file": "growatt_log.csv"
+    "log_dir": "./logs",  # Directory for monthly CSV files
+    "log_file": "growatt_log.csv"  # Legacy single file (optional fallback)
 }
 
 config = DEFAULT_CONFIG.copy()
@@ -39,6 +46,10 @@ if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r') as f:
         user_config = json.load(f)
         config.update(user_config)
+
+# Ensure log directory exists
+log_dir = config.get("log_dir", "./logs")
+os.makedirs(log_dir, exist_ok=True)
 
 # Global state
 current_data = {
@@ -60,6 +71,68 @@ data_lock = Lock()
 
 RETRY_TIMEOUT_SEC = 10
 RETRY_DELAY_SEC = 0.5
+
+
+# ---------------------------------------------------------------------
+# CSV File Management (Monthly Archives)
+# ---------------------------------------------------------------------
+def get_monthly_log_file(dt=None):
+    """Get the CSV file path for a given month (YYYY-MM format)"""
+    if dt is None:
+        dt = datetime.now()
+    month_str = dt.strftime('%Y-%m')
+    return os.path.join(log_dir, f"growatt_log_{month_str}.csv")
+
+
+def get_log_files_for_date_range(start_date, end_date):
+    """Get all CSV files that may contain data for the given date range"""
+    files = []
+    
+    # Generate all months in range
+    current = start_date.replace(day=1)
+    end_month = end_date.replace(day=1)
+    
+    while current <= end_month:
+        filepath = get_monthly_log_file(current)
+        if os.path.exists(filepath):
+            files.append(filepath)
+        # Move to next month
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        else:
+            current = current.replace(month=current.month + 1)
+    
+    # Also check legacy single file
+    legacy_file = config.get("log_file")
+    if legacy_file and os.path.exists(legacy_file) and legacy_file not in files:
+        files.append(legacy_file)
+    
+    return files
+
+
+def get_all_log_files():
+    """Get all available log files for archive listing"""
+    pattern = os.path.join(log_dir, "growatt_log_*.csv")
+    files = glob.glob(pattern)
+    
+    # Extract month info
+    result = []
+    for f in sorted(files):
+        basename = os.path.basename(f)
+        try:
+            # Parse growatt_log_YYYY-MM.csv
+            month_str = basename.replace("growatt_log_", "").replace(".csv", "")
+            size = os.path.getsize(f)
+            result.append({
+                "filename": basename,
+                "path": f,
+                "month": month_str,
+                "size_mb": round(size / (1024 * 1024), 2)
+            })
+        except:
+            continue
+    
+    return result
 
 
 # ---------------------------------------------------------------------
@@ -178,10 +251,8 @@ def poll_inverter():
                 if len(historical_data) > max_history:
                     historical_data.pop(0)
             
-            # Log to CSV if configured
-            log_file = config.get("log_file")
-            if log_file:
-                log_to_csv(log_file, current_data)
+            # Log to monthly CSV file
+            log_to_csv(current_data)
             
             print(f"📊 [{timestamp}] PV={pv:.2f}kW Load={load_val:.2f}kW Grid={grid:.2f}kW Batt={battery_net:.2f}kW SOC={soc_bms}%")
             
@@ -193,9 +264,10 @@ def poll_inverter():
         time.sleep(interval)
 
 
-def log_to_csv(filepath, data):
-    """Append data to CSV log file"""
-    file_exists = os.path.exists(filepath)
+def log_to_csv(data):
+    """Append data to monthly CSV log file"""
+    filepath = get_monthly_log_file()
+    file_exists = os.path.exists(filepath) and os.path.getsize(filepath) > 0
     
     with open(filepath, 'a', newline='') as f:
         fieldnames = ['timestamp', 'solar', 'load', 'grid_export', 'grid_import', 
@@ -203,10 +275,46 @@ def log_to_csv(filepath, data):
                       'soc_inv', 'soc_bms']
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         
-        if not file_exists or os.path.getsize(filepath) == 0:
+        if not file_exists:
             writer.writeheader()
         
         writer.writerow({k: data.get(k, 0) for k in fieldnames})
+
+
+def read_csv_data(filepath, start_date=None, end_date=None):
+    """Read data from a CSV file with optional date filtering"""
+    data = []
+    try:
+        with open(filepath, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    ts = datetime.fromisoformat(row["timestamp"])
+                    
+                    # Apply date filter if provided
+                    if start_date and ts.date() < start_date:
+                        continue
+                    if end_date and ts.date() > end_date:
+                        continue
+                    
+                    data.append({
+                        "timestamp": row["timestamp"],
+                        "solar": float(row.get("solar", 0)),
+                        "load": float(row.get("load", 0)),
+                        "grid_export": float(row.get("grid_export", 0)),
+                        "grid_import": float(row.get("grid_import", 0)),
+                        "battery_charge": float(row.get("battery_charge", 0)),
+                        "battery_discharge": float(row.get("battery_discharge", 0)),
+                        "battery_net": float(row.get("battery_net", 0)),
+                        "soc_inv": int(float(row.get("soc_inv", 0))),
+                        "soc_bms": int(float(row.get("soc_bms", 0)))
+                    })
+                except (ValueError, KeyError):
+                    continue
+    except Exception as e:
+        print(f"Error reading {filepath}: {e}")
+    
+    return data
 
 
 # ---------------------------------------------------------------------
@@ -262,7 +370,8 @@ def get_history():
 @app.route('/api/history/range', methods=['GET'])
 def get_history_range():
     """
-    Get historical data for a date range from CSV log.
+    Get historical data for a date range from CSV logs.
+    Automatically queries all relevant monthly archive files.
     
     Query parameters:
     - start_date: Start date in YYYY-MM-DD format (required)
@@ -287,9 +396,10 @@ def get_history_range():
     if end_date < start_date:
         return jsonify({"error": "end_date cannot be before start_date"}), 400
     
-    # Read from CSV log
-    log_file = config.get("log_file")
-    if not log_file or not os.path.exists(log_file):
+    # Get all relevant CSV files
+    files = get_log_files_for_date_range(start_date, end_date)
+    
+    if not files:
         # Fallback to in-memory data
         with data_lock:
             data = [
@@ -300,42 +410,30 @@ def get_history_range():
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
             "count": len(data),
-            "data": data[:limit] if limit else data
+            "data": data[:limit] if limit else data,
+            "source": "memory"
         })
     
-    # Read from CSV
-    data = []
-    with open(log_file, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                ts = datetime.fromisoformat(row["timestamp"])
-                if start_date <= ts.date() <= end_date:
-                    data.append({
-                        "timestamp": row["timestamp"],
-                        "solar": float(row.get("solar", 0)),
-                        "load": float(row.get("load", 0)),
-                        "grid_export": float(row.get("grid_export", 0)),
-                        "grid_import": float(row.get("grid_import", 0)),
-                        "battery_charge": float(row.get("battery_charge", 0)),
-                        "battery_discharge": float(row.get("battery_discharge", 0)),
-                        "battery_net": float(row.get("battery_net", 0)),
-                        "soc_inv": int(float(row.get("soc_inv", 0))),
-                        "soc_bms": int(float(row.get("soc_bms", 0)))
-                    })
-            except (ValueError, KeyError):
-                continue
+    # Read from all relevant CSV files
+    all_data = []
+    for filepath in files:
+        all_data.extend(read_csv_data(filepath, start_date, end_date))
+    
+    # Sort by timestamp
+    all_data.sort(key=lambda x: x["timestamp"])
     
     # Downsample if needed
-    if limit and len(data) > limit:
-        step = len(data) // limit
-        data = data[::step]
+    if limit and len(all_data) > limit:
+        step = len(all_data) // limit
+        all_data = all_data[::step]
     
     return jsonify({
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "count": len(data),
-        "data": data
+        "count": len(all_data),
+        "data": all_data,
+        "source": "csv",
+        "files_queried": len(files)
     })
 
 
@@ -349,15 +447,7 @@ def get_daily():
     except ValueError:
         return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
     
-    # Read from CSV log if available
-    log_file = config.get("log_file")
-    if log_file and os.path.exists(log_file):
-        daily_data = calculate_daily_from_csv(log_file, target_date)
-    else:
-        # Fallback to in-memory data
-        with data_lock:
-            daily_data = calculate_daily_from_memory(historical_data, target_date)
-    
+    daily_data = calculate_daily_totals(target_date)
     return jsonify(daily_data)
 
 
@@ -394,12 +484,7 @@ def get_daily_range():
     results = []
     current = start_date
     while current <= end_date:
-        log_file = config.get("log_file")
-        if log_file and os.path.exists(log_file):
-            daily_data = calculate_daily_from_csv(log_file, current)
-        else:
-            with data_lock:
-                daily_data = calculate_daily_from_memory(historical_data, current)
+        daily_data = calculate_daily_totals(current)
         results.append(daily_data)
         current += timedelta(days=1)
     
@@ -411,45 +496,10 @@ def get_daily_range():
     })
 
 
-def calculate_daily_from_memory(data, target_date):
-    """Calculate daily totals from in-memory data"""
-    filtered = [
-        d for d in data 
-        if datetime.fromisoformat(d["timestamp"]).date() == target_date
-    ]
-    
-    if not filtered:
-        return {
-            "date": target_date.isoformat(),
-            "solar_kwh": 0,
-            "load_kwh": 0,
-            "grid_export_kwh": 0,
-            "grid_import_kwh": 0,
-            "battery_charge_kwh": 0,
-            "battery_discharge_kwh": 0,
-            "count": 0
-        }
-    
-    # Simple integration (trapezoidal rule approximation)
-    interval_hours = config["polling_interval"] / 3600.0
-    
+def calculate_daily_totals(target_date):
+    """Calculate daily totals from CSV files or memory"""
     totals = {
-        "solar_kwh": sum(d["solar"] for d in filtered) * interval_hours,
-        "load_kwh": sum(d["load"] for d in filtered) * interval_hours,
-        "grid_export_kwh": sum(d["grid_export"] for d in filtered) * interval_hours,
-        "grid_import_kwh": sum(d["grid_import"] for d in filtered) * interval_hours,
-        "battery_charge_kwh": sum(d["battery_charge"] for d in filtered) * interval_hours,
-        "battery_discharge_kwh": sum(d["battery_discharge"] for d in filtered) * interval_hours,
-        "count": len(filtered)
-    }
-    
-    totals["date"] = target_date.isoformat()
-    return totals
-
-
-def calculate_daily_from_csv(filepath, target_date):
-    """Calculate daily totals from CSV log file"""
-    totals = {
+        "date": target_date.isoformat(),
         "solar_kwh": 0,
         "load_kwh": 0,
         "grid_export_kwh": 0,
@@ -461,24 +511,47 @@ def calculate_daily_from_csv(filepath, target_date):
     
     interval_hours = config["polling_interval"] / 3600.0
     
-    with open(filepath, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                ts = datetime.fromisoformat(row["timestamp"])
-                if ts.date() == target_date:
-                    totals["solar_kwh"] += float(row.get("solar", 0)) * interval_hours
-                    totals["load_kwh"] += float(row.get("load", 0)) * interval_hours
-                    totals["grid_export_kwh"] += float(row.get("grid_export", 0)) * interval_hours
-                    totals["grid_import_kwh"] += float(row.get("grid_import", 0)) * interval_hours
-                    totals["battery_charge_kwh"] += float(row.get("battery_charge", 0)) * interval_hours
-                    totals["battery_discharge_kwh"] += float(row.get("battery_discharge", 0)) * interval_hours
-                    totals["count"] += 1
-            except (ValueError, KeyError):
-                continue
+    # Get relevant CSV file
+    files = get_log_files_for_date_range(target_date, target_date)
     
-    totals["date"] = target_date.isoformat()
+    if files:
+        for filepath in files:
+            data = read_csv_data(filepath, target_date, target_date)
+            for row in data:
+                totals["solar_kwh"] += row["solar"] * interval_hours
+                totals["load_kwh"] += row["load"] * interval_hours
+                totals["grid_export_kwh"] += row["grid_export"] * interval_hours
+                totals["grid_import_kwh"] += row["grid_import"] * interval_hours
+                totals["battery_charge_kwh"] += row["battery_charge"] * interval_hours
+                totals["battery_discharge_kwh"] += row["battery_discharge"] * interval_hours
+                totals["count"] += 1
+    else:
+        # Fallback to in-memory data
+        with data_lock:
+            for d in historical_data:
+                if datetime.fromisoformat(d["timestamp"]).date() == target_date:
+                    totals["solar_kwh"] += d["solar"] * interval_hours
+                    totals["load_kwh"] += d["load"] * interval_hours
+                    totals["grid_export_kwh"] += d["grid_export"] * interval_hours
+                    totals["grid_import_kwh"] += d["grid_import"] * interval_hours
+                    totals["battery_charge_kwh"] += d["battery_charge"] * interval_hours
+                    totals["battery_discharge_kwh"] += d["battery_discharge"] * interval_hours
+                    totals["count"] += 1
+    
     return totals
+
+
+@app.route('/api/archives', methods=['GET'])
+def get_archives():
+    """List all available archive files"""
+    archives = get_all_log_files()
+    total_size = sum(a["size_mb"] for a in archives)
+    
+    return jsonify({
+        "archives": archives,
+        "total_files": len(archives),
+        "total_size_mb": round(total_size, 2)
+    })
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
@@ -517,4 +590,6 @@ if __name__ == '__main__':
     # Start Flask server
     port = int(os.getenv('PORT', args.port))
     print(f"🚀 Starting Flask API server on port {port}")
+    print(f"📁 Log directory: {log_dir}")
+    print(f"📊 Archives: {len(get_all_log_files())} files")
     app.run(host='0.0.0.0', port=port, debug=False)
