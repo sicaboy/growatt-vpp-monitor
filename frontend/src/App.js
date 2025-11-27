@@ -113,7 +113,7 @@ const DateRangePicker = ({ startDate, endDate, onStartDateChange, onEndDateChang
 // ============================================================
 // Sankey 图组件
 // ============================================================
-const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 350 }) => {
+const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420 }) => {
   const { 
     solar = 0, 
     battery_discharge = 0, 
@@ -284,16 +284,16 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 350 })
   };
 
   return (
-    <div style={{ width: "100%", height }}>
+    <div style={{ width: "100%", height, overflowX: "auto" }}>
       <Sankey
-        width={650}
+        width={750}
         height={height}
         data={{ nodes, links }}
         node={<CustomNode />}
         link={<CustomLink />}
-        nodePadding={35}
-        nodeWidth={90}
-        margin={{ top: 15, right: 15, bottom: 15, left: 15 }}
+        nodePadding={50}
+        nodeWidth={110}
+        margin={{ top: 25, right: 25, bottom: 25, left: 25 }}
       />
     </div>
   );
@@ -347,33 +347,54 @@ const RealtimeSection = ({ currentData, error }) => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 左侧：数据卡片 */}
-        <div className="space-y-4">
-          <h3 className="text-gray-400 text-sm font-medium">功率数据 (kW)</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard title="Solar" value={currentData.solar} unit="kW" icon="☀️" color="yellow" />
-            <StatCard title="Load" value={currentData.load} unit="kW" icon="🏠" color="purple" />
-            <StatCard title="Battery In" subtitle="充电" value={currentData.battery_charge} unit="kW" icon="🔋↓" color="cyan-in" />
-            <StatCard title="Battery Out" subtitle="放电" value={currentData.battery_discharge} unit="kW" icon="🔋↑" color="cyan-out" />
-            <StatCard title="Grid In" subtitle="买电" value={currentData.grid_import} unit="kW" icon="⬇️" color="blue-in" />
-            <StatCard title="Grid Out" subtitle="卖电" value={currentData.grid_export} unit="kW" icon="⬆️" color="green-out" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* 左侧：数据卡片 - 占1列 */}
+        <div className="lg:col-span-1 space-y-3">
+          <h3 className="text-gray-400 text-xs font-medium">功率数据 (kW)</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniStatCard title="Solar" value={currentData.solar} icon="☀️" color="yellow" />
+            <MiniStatCard title="Load" value={currentData.load} icon="🏠" color="purple" />
+            <MiniStatCard title="Batt In" value={currentData.battery_charge} icon="🔋↓" color="cyan" />
+            <MiniStatCard title="Batt Out" value={currentData.battery_discharge} icon="🔋↑" color="cyan" />
+            <MiniStatCard title="Grid In" value={currentData.grid_import} icon="⬇️" color="blue" />
+            <MiniStatCard title="Grid Out" value={currentData.grid_export} icon="⬆️" color="green" />
           </div>
           
-          <h3 className="text-gray-400 text-sm font-medium mt-4">电池状态</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard title="SOC (INV)" value={currentData.soc_inv} unit="%" icon="📊" color="green" />
-            <StatCard title="SOC (BMS)" value={currentData.soc_bms} unit="%" icon="📈" color="green" />
+          <h3 className="text-gray-400 text-xs font-medium">电池状态</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniStatCard title="SOC INV" value={currentData.soc_inv} icon="📊" color="green" unit="%" />
+            <MiniStatCard title="SOC BMS" value={currentData.soc_bms} icon="📈" color="green" unit="%" />
           </div>
         </div>
 
-        {/* 右侧：Sankey图 */}
-        <div className="bg-gray-800/50 rounded-xl p-4">
+        {/* 右侧：Sankey图 - 占2列 */}
+        <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-4">
           <h3 className="text-gray-400 text-sm font-medium mb-2">能量流向</h3>
-          <SankeyFlow data={currentData} height={300} />
+          <SankeyFlow data={currentData} height={320} />
         </div>
       </div>
     </SectionContainer>
+  );
+};
+
+// 紧凑版状态卡片
+const MiniStatCard = ({ title, value, icon, color, unit = "kW" }) => {
+  const colorClasses = {
+    yellow: 'bg-yellow-500/20 text-yellow-400',
+    purple: 'bg-purple-500/20 text-purple-400',
+    cyan: 'bg-cyan-500/20 text-cyan-400',
+    blue: 'bg-blue-500/20 text-blue-400',
+    green: 'bg-green-500/20 text-green-400',
+  };
+
+  return (
+    <div className={`${colorClasses[color] || colorClasses.blue} rounded-lg p-2`}>
+      <p className="text-xs opacity-80">{icon} {title}</p>
+      <p className="text-white text-lg font-bold">
+        {typeof value === 'number' ? value.toFixed(2) : value}
+        <span className="text-xs ml-1 opacity-70">{unit}</span>
+      </p>
+    </div>
   );
 };
 
@@ -536,7 +557,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
                   battery_net: totals.battery_charge - totals.battery_discharge,
                 }}
                 unit="kWh"
-                height={350}
+                height={420}
               />
             </div>
           )}
