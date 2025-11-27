@@ -20,12 +20,12 @@ const getToday = () => formatDate(new Date());
 // 模块标题组件
 // ============================================================
 const SectionTitle = ({ icon, title, subtitle }) => (
-  <div className="mb-4">
-    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-      <span>{icon}</span>
+  <div className="mb-3">
+    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+      <span className="text-xl">{icon}</span>
       <span>{title}</span>
     </h2>
-    {subtitle && <p className="text-gray-400 text-sm mt-1">{subtitle}</p>}
+    {subtitle && <p className="text-gray-400 text-xs">{subtitle}</p>}
   </div>
 );
 
@@ -33,7 +33,7 @@ const SectionTitle = ({ icon, title, subtitle }) => (
 // 模块容器组件
 // ============================================================
 const SectionContainer = ({ children, className = "" }) => (
-  <div className={`bg-gray-900/50 rounded-2xl p-6 border border-gray-800 ${className}`}>
+  <div className={`bg-gray-900/50 rounded-2xl p-4 border border-gray-800 ${className}`}>
     {children}
   </div>
 );
@@ -211,7 +211,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    const margin = { top: 20, right: 120, bottom: 20, left: 120 };
+    const margin = { top: 15, right: 20, bottom: 15, left: 20 };
     const width = containerWidth - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -222,8 +222,8 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // 定义节点：左边3个输入，右边3个输出
-    const nodeWidth = 100;
-    const nodeMinHeight = 60;
+    const nodeWidth = 90;
+    const nodeMinHeight = 50;
     
     // 计算左侧节点高度（按值比例，但有最小高度）
     const leftNodes = ["Solar", "Battery Out", "Grid In"];
@@ -232,7 +232,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
     const leftTotal = Math.max(totalInput, 0.001);
     const rightTotal = Math.max(totalOutput, 0.001);
     
-    const availableHeight = innerHeight - 40; // 留一些间距
+    const availableHeight = innerHeight - 30; // 留一些间距
 
     // 计算节点位置和大小
     const nodeData = [];
@@ -254,7 +254,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
         color: nodeColors[name],
         percentage: nodePercentages[name],
       });
-      leftY += h + 15;
+      leftY += h + 8;
     });
 
     // 右侧节点
@@ -274,7 +274,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
         color: nodeColors[name],
         percentage: nodePercentages[name],
       });
-      rightY += h + 15;
+      rightY += h + 8;
     });
 
     // 创建节点名到数据的映射
@@ -473,16 +473,16 @@ const RealtimeSection = ({ currentData, error }) => {
       />
       
       {error && (
-        <div className="mb-4 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+        <div className="mb-3 px-3 py-1.5 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
           ⚠️ {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* 左侧：数据卡片 - 占1列 */}
-        <div className="lg:col-span-1 space-y-3">
+        <div className="lg:col-span-1 space-y-2">
           <h3 className="text-gray-400 text-xs font-medium">功率数据 (kW)</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             <MiniStatCard title="Solar" value={currentData.solar} icon="☀️" color="yellow" />
             <MiniStatCard title="Load" value={currentData.load} icon="🏠" color="purple" />
             <MiniStatCard title="Batt In" value={currentData.battery_charge} icon="🔋↓" color="cyan" />
@@ -492,16 +492,16 @@ const RealtimeSection = ({ currentData, error }) => {
           </div>
           
           <h3 className="text-gray-400 text-xs font-medium">电池状态</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             <MiniStatCard title="SOC INV" value={currentData.soc_inv} icon="📊" color="green" unit="%" />
             <MiniStatCard title="SOC BMS" value={currentData.soc_bms} icon="📈" color="green" unit="%" />
           </div>
         </div>
 
         {/* 右侧：Sankey图 - 占2列 */}
-        <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-4">
-          <h3 className="text-gray-400 text-sm font-medium mb-2">能量流向</h3>
-          <SankeyFlow data={currentData} height={320} instanceId="realtime" />
+        <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-3">
+          <h3 className="text-gray-400 text-xs font-medium mb-1">能量流向</h3>
+          <SankeyFlow data={currentData} height={280} instanceId="realtime" />
         </div>
       </div>
     </SectionContainer>
@@ -519,9 +519,9 @@ const MiniStatCard = ({ title, value, icon, color, unit = "kW" }) => {
   };
 
   return (
-    <div className={`${colorClasses[color] || colorClasses.blue} rounded-lg p-2`}>
-      <p className="text-xs opacity-80">{icon} {title}</p>
-      <p className="text-white text-lg font-bold">
+    <div className={`${colorClasses[color] || colorClasses.blue} rounded-lg px-2 py-1.5`}>
+      <p className="text-xs opacity-80 leading-tight">{icon} {title}</p>
+      <p className="text-white text-base font-bold leading-tight">
         {typeof value === 'number' ? value.toFixed(2) : value}
         <span className="text-xs ml-1 opacity-70">{unit}</span>
       </p>
@@ -569,93 +569,132 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
 
   return (
     <SectionContainer>
-      <SectionTitle 
-        icon="📊" 
-        title="历史统计" 
-        subtitle={`查询范围: ${dateRangeText}`}
-      />
-
-      {/* 日期选择器 */}
-      <div className="mb-6">
-        <DateRangePicker
-          startDate={startDate}
-          endDate={endDate}
-          onStartDateChange={onStartDateChange}
-          onEndDateChange={onEndDateChange}
-          onApply={onApply}
-        />
+      {/* 标题和日期选择器在同一行 */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📊</span>
+          <div>
+            <h2 className="text-lg font-bold text-white">历史统计</h2>
+            <p className="text-gray-400 text-xs">{dateRangeText}</p>
+          </div>
+        </div>
+        
+        {/* 紧凑版日期选择器 */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => onStartDateChange(e.target.value)}
+            className="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+          />
+          <span className="text-gray-400 text-xs">~</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => onEndDateChange(e.target.value)}
+            className="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+          />
+          <button
+            onClick={onApply}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
+          >
+            查询
+          </button>
+          <button
+            onClick={() => {
+              const today = getToday();
+              onStartDateChange(today);
+              onEndDateChange(today);
+              setTimeout(onApply, 0);
+            }}
+            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
+          >
+            今天
+          </button>
+          <button
+            onClick={() => {
+              const today = new Date();
+              const weekAgo = new Date(today);
+              weekAgo.setDate(weekAgo.getDate() - 7);
+              onStartDateChange(formatDate(weekAgo));
+              onEndDateChange(formatDate(today));
+              setTimeout(onApply, 0);
+            }}
+            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
+          >
+            7天
+          </button>
+          <button
+            onClick={() => {
+              const today = new Date();
+              const monthAgo = new Date(today);
+              monthAgo.setDate(monthAgo.getDate() - 30);
+              onStartDateChange(formatDate(monthAgo));
+              onEndDateChange(formatDate(today));
+              setTimeout(onApply, 0);
+            }}
+            className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
+          >
+            30天
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="text-gray-400 text-center py-12">加载中...</div>
+        <div className="text-gray-400 text-center py-8">加载中...</div>
       ) : !dailyData || dailyData.length === 0 ? (
-        <div className="text-gray-400 text-center py-12">暂无数据</div>
+        <div className="text-gray-400 text-center py-8">暂无数据</div>
       ) : (
-        <>
-          {/* 汇总数据卡片 */}
-          <div className="mb-6">
-            <h3 className="text-gray-400 text-sm font-medium mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {/* 左侧：数据卡片 - 占1列 */}
+          <div className="lg:col-span-1 space-y-2">
+            <h3 className="text-gray-400 text-xs font-medium">
               {dailyData.length === 1 ? '当日统计 (kWh)' : `${dailyData.length}天汇总 (kWh)`}
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="bg-yellow-500/20 rounded-lg p-3">
-                <div className="text-yellow-400 text-xs">☀️ Solar</div>
-                <div className="text-white text-xl font-bold">{totals.solar.toFixed(2)}</div>
-              </div>
-              <div className="bg-purple-500/20 rounded-lg p-3">
-                <div className="text-purple-400 text-xs">🏠 Load</div>
-                <div className="text-white text-xl font-bold">{totals.load.toFixed(2)}</div>
-              </div>
-              <div className="bg-cyan-500/20 rounded-lg p-3">
-                <div className="text-cyan-400 text-xs">🔋↓ Charge</div>
-                <div className="text-white text-xl font-bold">{totals.battery_charge.toFixed(2)}</div>
-              </div>
-              <div className="bg-cyan-500/20 rounded-lg p-3">
-                <div className="text-cyan-400 text-xs">🔋↑ Discharge</div>
-                <div className="text-white text-xl font-bold">{totals.battery_discharge.toFixed(2)}</div>
-              </div>
-              <div className="bg-blue-500/20 rounded-lg p-3">
-                <div className="text-blue-400 text-xs">⬇️ Grid Import</div>
-                <div className="text-white text-xl font-bold">{totals.grid_import.toFixed(2)}</div>
-              </div>
-              <div className="bg-green-500/20 rounded-lg p-3">
-                <div className="text-green-400 text-xs">⬆️ Grid Export</div>
-                <div className="text-white text-xl font-bold">{totals.grid_export.toFixed(2)}</div>
-              </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <MiniStatCard title="Solar" value={totals.solar} icon="☀️" color="yellow" unit="kWh" />
+              <MiniStatCard title="Load" value={totals.load} icon="🏠" color="purple" unit="kWh" />
+              <MiniStatCard title="Charge" value={totals.battery_charge} icon="🔋↓" color="cyan" unit="kWh" />
+              <MiniStatCard title="Discharge" value={totals.battery_discharge} icon="🔋↑" color="cyan" unit="kWh" />
+              <MiniStatCard title="Grid In" value={totals.grid_import} icon="⬇️" color="blue" unit="kWh" />
+              <MiniStatCard title="Grid Out" value={totals.grid_export} icon="⬆️" color="green" unit="kWh" />
             </div>
+            
+            {/* 多天时显示视图切换 */}
+            {dailyData.length > 1 && (
+              <div className="pt-1">
+                <h3 className="text-gray-400 text-xs font-medium mb-1">视图切换</h3>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setViewMode('chart')}
+                    className={`flex-1 px-2 py-1 rounded text-xs transition-colors ${
+                      viewMode === 'chart' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    📊 柱状图
+                  </button>
+                  <button
+                    onClick={() => setViewMode('sankey')}
+                    className={`flex-1 px-2 py-1 rounded text-xs transition-colors ${
+                      viewMode === 'sankey' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    ⚡ 流向图
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* 视图切换按钮 */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-400 text-sm font-medium">
-              {dailyData.length > 1 ? '详细数据' : '能量分布'}
+          {/* 右侧：图表 - 占2列 */}
+          <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-3">
+            <h3 className="text-gray-400 text-xs font-medium mb-1">
+              {viewMode === 'sankey' ? '能量流向' : '每日统计'}
             </h3>
-            <div className="flex gap-2">
-              {dailyData.length > 1 && (
-                <button
-                  onClick={() => setViewMode('chart')}
-                  className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                    viewMode === 'chart' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  📊 柱状图
-                </button>
-              )}
-              <button
-                onClick={() => setViewMode('sankey')}
-                className={`px-3 py-1.5 rounded text-sm transition-colors ${
-                  viewMode === 'sankey' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                ⚡ 能量流向
-              </button>
-            </div>
-          </div>
-
-          {/* 柱状图（多天且选择chart时显示） */}
-          {dailyData.length > 1 && viewMode === 'chart' && (
-            <div className="bg-gray-800/50 rounded-xl p-4">
-              <ResponsiveContainer width="100%" height={300}>
+            
+            {/* 柱状图（多天且选择chart时显示） */}
+            {dailyData.length > 1 && viewMode === 'chart' && (
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="date" stroke="#9CA3AF" />
@@ -671,12 +710,10 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
                   <Bar dataKey="gridImport" fill="#60A5FA" name="Grid Import" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          )}
+            )}
 
-          {/* Sankey图（选择sankey时显示） */}
-          {viewMode === 'sankey' && (
-            <div className="bg-gray-800/50 rounded-xl p-4">
+            {/* Sankey图 */}
+            {(dailyData.length === 1 || viewMode === 'sankey') && (
               <SankeyFlow 
                 data={{
                   solar: totals.solar,
@@ -688,12 +725,12 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
                   battery_net: totals.battery_charge - totals.battery_discharge,
                 }}
                 unit="kWh"
-                height={420}
+                height={280}
                 instanceId="history"
               />
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
     </SectionContainer>
   );
