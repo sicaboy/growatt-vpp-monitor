@@ -223,7 +223,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
 
     // 定义节点：左边3个输入，右边3个输出
     const nodeWidth = 90;
-    const nodeMinHeight = 50;
+    const nodeMinHeight = Math.min(50, (innerHeight - 30) / 3 - 10);
     
     // 计算左侧节点高度（按值比例，但有最小高度）
     const leftNodes = ["Solar", "Battery Out", "Grid In"];
@@ -242,7 +242,9 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
     leftNodes.forEach((name, i) => {
       const value = nodeValues[name];
       const ratio = leftTotal > 0 ? value / leftTotal : 0;
-      const h = Math.max(ratio * availableHeight * 0.8, nodeMinHeight);
+      //const h = Math.max(ratio * availableHeight * 0.8, nodeMinHeight);
+      const nodeMaxHeight = (innerHeight - 30) / 3;  // 最大高度 = 可用高度/3
+      const h = Math.min(Math.max(ratio * availableHeight * 0.8, nodeMinHeight), nodeMaxHeight);
       nodeData.push({
         name,
         x: 0,
@@ -262,7 +264,9 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
     rightNodes.forEach((name, i) => {
       const value = nodeValues[name];
       const ratio = rightTotal > 0 ? value / rightTotal : 0;
-      const h = Math.max(ratio * availableHeight * 0.8, nodeMinHeight);
+      //const h = Math.max(ratio * availableHeight * 0.8, nodeMinHeight);
+      const nodeMaxHeight = (innerHeight - 30) / 3;  // 最大高度 = 可用高度/3
+      const h = Math.min(Math.max(ratio * availableHeight * 0.8, nodeMinHeight), nodeMaxHeight);
       nodeData.push({
         name,
         x: width - nodeWidth,
@@ -392,7 +396,7 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
         .attr("height", node.height)
         .attr("rx", 6)
         .attr("fill", node.color)
-        .attr("opacity", node.value > 0.001 ? 0.9 : 0.3);
+        .attr("opacity", 0.9 );
       
       // 节点文字
       const textY = node.height / 2;
@@ -507,8 +511,8 @@ const RealtimeSection = ({ currentData, error }) => {
           
           <h3 className="text-gray-400 text-xs font-medium">电池状态</h3>
           <div className="grid grid-cols-2 gap-1.5">
-            <MiniStatCard title="SOC INV" value={currentData.soc_inv} icon="📊" color="green" unit="%" />
-            <MiniStatCard title="SOC BMS" value={currentData.soc_bms} icon="📈" color="green" unit="%" />
+            <MiniStatCard title="SOC INV" value={currentData.soc_inv} icon="📊" color="emerald" unit="%" />
+            <MiniStatCard title="SOC BMS" value={currentData.soc_bms} icon="📈" color="emerald" unit="%" />
           </div>
         </div>
 
@@ -523,17 +527,47 @@ const RealtimeSection = ({ currentData, error }) => {
 };
 
 // 紧凑版状态卡片
+// const MiniStatCard = ({ title, value, icon, color, unit = "kW" }) => {
+//   const colorClasses = {
+//     // yellow: 'bg-yellow-500/20 text-yellow-400',
+//     // purple: 'bg-purple-500/20 text-purple-400',
+//     // cyan: 'bg-cyan-500/20 text-cyan-400',
+//     // blue: 'bg-blue-500/20 text-blue-400',
+//     // green: 'bg-green-500/20 text-green-400',
+//     yellow: 'bg-[#FCD34D]/20 text-[#FCD34D]',
+//     purple: 'bg-[#A78BFA]/20 text-[#A78BFA]',
+//     cyan: 'bg-[#22D3EE]/20 text-[#22D3EE]',
+//     blue: 'bg-[#60A5FA]/20 text-[#60A5FA]',
+//     green: 'bg-[#34D399]/20 text-[#34D399]',
+//   };
+
+//   return (
+//     <div className={`${colorClasses[color] || colorClasses.blue} rounded-lg px-2 py-1.5`}>
+//       <p className="text-xs opacity-80 leading-tight">{icon} {title}</p>
+//       <p className="text-white text-base font-bold leading-tight">
+//         {typeof value === 'number' ? value.toFixed(2) : value}
+//         <span className="text-xs ml-1 opacity-70">{unit}</span>
+//       </p>
+//     </div>
+//   );
+//};
 const MiniStatCard = ({ title, value, icon, color, unit = "kW" }) => {
-  const colorClasses = {
-    yellow: 'bg-yellow-500/20 text-yellow-400',
-    purple: 'bg-purple-500/20 text-purple-400',
-    cyan: 'bg-cyan-500/20 text-cyan-400',
-    blue: 'bg-blue-500/20 text-blue-400',
-    green: 'bg-green-500/20 text-green-400',
+  const colors = {
+    yellow: '#FCD34D',
+    purple: '#A78BFA',
+    cyan: '#22D3EE',
+    blue: '#60A5FA',
+    green: '#34D399',
+    emerald: '#F59E0B',
   };
+  
+  const c = colors[color] || colors.blue;
 
   return (
-    <div className={`${colorClasses[color] || colorClasses.blue} rounded-lg px-2 py-1.5`}>
+    <div 
+      className="rounded-lg px-2 py-1.5"
+      style={{ backgroundColor: `${c}B9`, color: c }}
+    >
       <p className="text-xs opacity-80 leading-tight">{icon} {title}</p>
       <p className="text-white text-base font-bold leading-tight">
         {typeof value === 'number' ? value.toFixed(2) : value}
