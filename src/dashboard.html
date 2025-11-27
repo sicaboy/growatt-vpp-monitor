@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Growatt Solar Monitor - 能源流动仪表板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse-glow {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        .flow-path {
+            transition: all 0.5s ease-in-out;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #FCD34D 0%, #67E8F9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-white">
+    <div class="min-h-screen p-4 md:p-6">
+        <!-- Header -->
+        <div class="max-w-7xl mx-auto mb-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+                <div>
+                    <h1 class="text-3xl md:text-4xl font-bold gradient-text">
+                        Growatt Solar Monitor
+                    </h1>
+                    <p class="text-gray-400 mt-1" id="current-time">加载中...</p>
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <div id="connection-status" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800">
+                        <div class="w-2 h-2 rounded-full bg-gray-400" id="status-dot"></div>
+                        <span class="text-sm" id="status-text">连接中...</span>
+                    </div>
+                    <button onclick="toggleSettings()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
+                        ⚙️ 设置
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Panel (Hidden by default) -->
+        <div id="settings-panel" class="max-w-7xl mx-auto mb-6 hidden">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h3 class="text-xl font-bold mb-4">系统设置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">逆变器IP地址</label>
+                        <input type="text" id="config-ip" class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg" value="192.168.9.242">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">端口</label>
+                        <input type="number" id="config-port" class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg" value="502">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">刷新间隔(秒)</label>
+                        <input type="number" id="config-interval" class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg" value="5">
+                    </div>
+                </div>
+                <div class="mt-4 flex gap-2">
+                    <button onclick="saveSettings()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded-lg text-sm transition">
+                        保存设置
+                    </button>
+                    <button onclick="toggleSettings()" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition">
+                        取消
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Summary Cards -->
+        <div class="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 border border-yellow-500/30 rounded-xl p-4">
+                <div class="text-yellow-300 text-sm font-semibold mb-1">太阳能 SOLAR</div>
+                <div class="text-3xl font-bold text-yellow-100" id="daily-solar">0.00</div>
+                <div class="text-yellow-200/70 text-sm">kWh</div>
+            </div>
+            
+            <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/10 border border-cyan-500/30 rounded-xl p-4">
+                <div class="text-cyan-300 text-sm font-semibold mb-1">电池充电</div>
+                <div class="text-3xl font-bold text-cyan-100" id="daily-battery-charge">0.00</div>
+                <div class="text-cyan-200/70 text-sm">kWh</div>
+            </div>
+            
+            <div class="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-xl p-4">
+                <div class="text-purple-300 text-sm font-semibold mb-1">家庭负载 LOAD</div>
+                <div class="text-3xl font-bold text-purple-100" id="daily-load">0.00</div>
+                <div class="text-purple-200/70 text-sm">kWh</div>
+            </div>
+            
+            <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-xl p-4">
+                <div class="text-blue-300 text-sm font-semibold mb-1">电网输出</div>
+                <div class="text-3xl font-bold text-blue-100" id="daily-grid-export">0.00</div>
+                <div class="text-blue-200/70 text-sm">kWh</div>
+            </div>
+        </div>
+
+        <!-- Real-time Power Flow -->
+        <div class="max-w-7xl mx-auto mb-6">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span class="text-cyan-400">⚡</span>
+                    实时能量流动
+                </h2>
+                <div class="relative w-full bg-gray-900 rounded-xl">
+                    <svg id="sankey-diagram" viewBox="0 0 800 400" class="w-full h-auto"></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Stats -->
+        <div class="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">太阳能功率</div>
+                <div class="text-2xl font-bold text-yellow-400" id="current-solar">0.00 kW</div>
+            </div>
+            
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">负载功率</div>
+                <div class="text-2xl font-bold text-purple-400" id="current-load">0.00 kW</div>
+            </div>
+            
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">电池SOC</div>
+                <div class="text-2xl font-bold text-cyan-400" id="current-soc">0%</div>
+            </div>
+            
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">电网功率</div>
+                <div class="text-2xl font-bold text-blue-400" id="current-grid">0.00 kW</div>
+            </div>
+
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">电池功率</div>
+                <div class="text-2xl font-bold text-cyan-400" id="current-battery">0.00 kW</div>
+            </div>
+        </div>
+
+        <!-- Historical Chart -->
+        <div class="max-w-7xl mx-auto">
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4">功率趋势图 (kW)</h2>
+                <canvas id="power-chart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let config = {
+            apiUrl: 'http://localhost:5002/api',
+            pollInterval: 5000
+        };
+
+        let historicalData = [];
+        let chart = null;
+
+        // Initialize Chart.js
+        function initChart() {
+            const ctx = document.getElementById('power-chart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: '太阳能',
+                            data: [],
+                            borderColor: '#FCD34D',
+                            backgroundColor: 'rgba(252, 211, 77, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: '负载',
+                            data: [],
+                            borderColor: '#C084FC',
+                            backgroundColor: 'rgba(192, 132, 252, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: '电池充电',
+                            data: [],
+                            borderColor: '#67E8F9',
+                            backgroundColor: 'rgba(103, 232, 249, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: '电池放电',
+                            data: [],
+                            borderColor: '#34D399',
+                            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#9CA3AF'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: '#374151'
+                            },
+                            ticks: {
+                                color: '#9CA3AF'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#374151'
+                            },
+                            ticks: {
+                                color: '#9CA3AF'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update Sankey Diagram
+        function updateSankeyDiagram(data) {
+            const svg = document.getElementById('sankey-diagram');
+            const maxFlow = Math.max(
+                data.solar + data.battery_discharge + data.grid_import,
+                data.battery_charge + data.load + data.grid_export,
+                1
+            );
+
+            // Calculate flows
+            const flows = {
+                solarToBattery: Math.min(data.solar, data.battery_charge),
+                solarToLoad: Math.max(0, Math.min(data.solar - data.battery_charge, data.load)),
+                solarToGrid: Math.max(0, data.solar - data.battery_charge - data.load),
+                batteryToLoad: Math.min(data.battery_discharge, data.load - data.solar),
+                gridToLoad: Math.max(0, data.load - data.solar - data.battery_discharge),
+                gridToBattery: Math.max(0, data.battery_charge - data.solar)
+            };
+
+            svg.innerHTML = `
+                <defs>
+                    <linearGradient id="solarGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#FCD34D" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#FCD34D" stop-opacity="0.3" />
+                    </linearGradient>
+                    <linearGradient id="batteryGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#67E8F9" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#67E8F9" stop-opacity="0.3" />
+                    </linearGradient>
+                    <linearGradient id="gridGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#93C5FD" stop-opacity="0.8" />
+                        <stop offset="100%" stop-color="#93C5FD" stop-opacity="0.3" />
+                    </linearGradient>
+                </defs>
+                
+                <!-- Source Nodes -->
+                <g id="sources">
+                    <rect x="20" y="50" width="120" height="80" rx="8" fill="#FCD34D" opacity="0.9" />
+                    <text x="80" y="85" text-anchor="middle" fill="#1F2937" font-size="14" font-weight="bold">太阳能</text>
+                    <text x="80" y="105" text-anchor="middle" fill="#1F2937" font-size="20" font-weight="bold">${data.solar.toFixed(2)}</text>
+                    <text x="80" y="120" text-anchor="middle" fill="#1F2937" font-size="12">kW</text>
+                    
+                    <rect x="20" y="160" width="120" height="80" rx="8" fill="#67E8F9" opacity="0.9" />
+                    <text x="80" y="195" text-anchor="middle" fill="#1F2937" font-size="14" font-weight="bold">电池放电</text>
+                    <text x="80" y="215" text-anchor="middle" fill="#1F2937" font-size="20" font-weight="bold">${data.battery_discharge.toFixed(2)}</text>
+                    <text x="80" y="230" text-anchor="middle" fill="#1F2937" font-size="12">kW</text>
+                    
+                    <rect x="20" y="270" width="120" height="80" rx="8" fill="#93C5FD" opacity="0.9" />
+                    <text x="80" y="305" text-anchor="middle" fill="#1F2937" font-size="14" font-weight="bold">电网输入</text>
+                    <text x="80" y="325" text-anchor="middle" fill="#1F2937" font-size="20" font-weight="bold">${data.grid_import.toFixed(2)}</text>
+                    <text x="80" y="340" text-anchor="middle" fill="#1F2937" font-size="12">kW</text>
+                </g>
+                
+                <!-- Flow Paths -->
+                <g id="flows">
+                    ${flows.solarToBattery > 0.05 ? `
+                    <path d="M 140 90 Q 400 90 660 110" fill="none" stroke="url(#solarGrad)" 
+                          stroke-width="${Math.max(2, flows.solarToBattery * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                    
+                    ${flows.solarToLoad > 0.05 ? `
+                    <path d="M 140 90 Q 400 200 660 240" fill="none" stroke="url(#solarGrad)" 
+                          stroke-width="${Math.max(2, flows.solarToLoad * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                    
+                    ${flows.solarToGrid > 0.05 ? `
+                    <path d="M 140 90 Q 400 310 660 330" fill="none" stroke="url(#solarGrad)" 
+                          stroke-width="${Math.max(2, flows.solarToGrid * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                    
+                    ${flows.batteryToLoad > 0.05 ? `
+                    <path d="M 140 200 Q 400 220 660 240" fill="none" stroke="url(#batteryGrad)" 
+                          stroke-width="${Math.max(2, flows.batteryToLoad * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                    
+                    ${flows.gridToLoad > 0.05 ? `
+                    <path d="M 140 310 Q 400 270 660 240" fill="none" stroke="url(#gridGrad)" 
+                          stroke-width="${Math.max(2, flows.gridToLoad * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                    
+                    ${flows.gridToBattery > 0.05 ? `
+                    <path d="M 140 310 Q 400 210 660 110" fill="none" stroke="url(#gridGrad)" 
+                          stroke-width="${Math.max(2, flows.gridToBattery * 30 / maxFlow)}" opacity="0.7" class="flow-path"/>
+                    ` : ''}
+                </g>
+                
+                <!-- Destination Nodes -->
+                <g id="destinations">
+                    <rect x="660" y="70" width="120" height="80" rx="8" fill="#67E8F9" opacity="0.9" />
+                    <text x="720" y="105" text-anchor="middle" fill="#1F2937" font-size="14" font-weight="bold">电池充电</text>
+                    <text x="720" y="125" text-anchor="middle" fill="#1F2937" font-size="20" font-weight="bold">${data.battery_charge.toFixed(2)}</text>
+                    <text x="720" y="140" text-anchor="middle" fill="#1F2937" font-size="12">kW</text>
+                    
+                    <rect x="660" y="200" width="120" height="80" rx="8" fill="#C084FC" opacity="0.9" />
+                    <text x="720" y="235" text-anchor="middle" fill="#1F2937" font-size="14" font-weight="bold">家庭负载</text>
+                    <text x="720" y="255" text-anchor="middle" fill="#1F2937" font-size="20" font-weight="bold">${data.load.toFixed(2)}</text>
+                    <text x="720" y="270" text-anchor="middle" fill="#1F2937" font-size="12">kW</text>
+                    
+                    <rect x="660" y="310" width="120" height="40" rx="8" fill="#93C5FD" opacity="0.9" />
+                    <text x="720" y="335" text-anchor="middle" fill="#1F2937" font-size="16" font-weight="bold">${data.grid_export.toFixed(2)} kW</text>
+                </g>
+            `;
+        }
+
+        // Fetch current data
+        async function fetchCurrentData() {
+            try {
+                const response = await fetch(`${config.apiUrl}/current`);
+                const data = await response.json();
+                
+                updateCurrentStats(data);
+                updateSankeyDiagram(data);
+                updateConnectionStatus(data.connected);
+                
+                // Add to historical data
+                historicalData.push(data);
+                if (historicalData.length > 50) {
+                    historicalData.shift();
+                }
+                
+                updateChart();
+                
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Fetch daily totals
+        async function fetchDailyData() {
+            try {
+                const response = await fetch(`${config.apiUrl}/daily`);
+                const data = await response.json();
+                
+                document.getElementById('daily-solar').textContent = data.solar_kwh.toFixed(2);
+                document.getElementById('daily-battery-charge').textContent = data.battery_charge_kwh.toFixed(2);
+                document.getElementById('daily-load').textContent = data.load_kwh.toFixed(2);
+                document.getElementById('daily-grid-export').textContent = data.grid_export_kwh.toFixed(2);
+                
+            } catch (error) {
+                console.error('Error fetching daily data:', error);
+            }
+        }
+
+        // Update current stats display
+        function updateCurrentStats(data) {
+            document.getElementById('current-solar').textContent = `${data.solar.toFixed(2)} kW`;
+            document.getElementById('current-load').textContent = `${data.load.toFixed(2)} kW`;
+            document.getElementById('current-soc').textContent = `${data.soc_bms}%`;
+            
+            const gridNet = data.grid_export - data.grid_import;
+            const gridElement = document.getElementById('current-grid');
+            gridElement.textContent = `${gridNet.toFixed(2)} kW`;
+            gridElement.className = `text-2xl font-bold ${gridNet > 0 ? 'text-green-400' : 'text-red-400'}`;
+
+            const batteryNet = data.battery_charge - data.battery_discharge;
+            const batteryElement = document.getElementById('current-battery');
+            batteryElement.textContent = `${batteryNet.toFixed(2)} kW`;
+            batteryElement.className = `text-2xl font-bold ${batteryNet > 0 ? 'text-cyan-400' : 'text-green-400'}`;
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            if (connected) {
+                statusDot.className = 'w-2 h-2 rounded-full bg-green-400 pulse-glow';
+                statusText.textContent = '已连接';
+                document.getElementById('connection-status').className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-green-900/30';
+            } else {
+                statusDot.className = 'w-2 h-2 rounded-full bg-red-400';
+                statusText.textContent = '未连接';
+                document.getElementById('connection-status').className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-red-900/30';
+            }
+        }
+
+        // Update chart
+        function updateChart() {
+            if (!chart || historicalData.length === 0) return;
+            
+            const labels = historicalData.map(d => {
+                const time = new Date(d.timestamp);
+                return time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            });
+            
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = historicalData.map(d => d.solar);
+            chart.data.datasets[1].data = historicalData.map(d => d.load);
+            chart.data.datasets[2].data = historicalData.map(d => d.battery_charge);
+            chart.data.datasets[3].data = historicalData.map(d => d.battery_discharge);
+            
+            chart.update('none');
+        }
+
+        // Update current time display
+        function updateTime() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('zh-CN', { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit' 
+            });
+            const timeStr = now.toLocaleTimeString('zh-CN');
+            document.getElementById('current-time').textContent = `${dateStr} ${timeStr} - 实时能源流动`;
+        }
+
+        // Toggle settings panel
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.classList.toggle('hidden');
+        }
+
+        // Save settings
+        function saveSettings() {
+            alert('设置功能需要后端API支持。请直接修改 config.json 文件或使用 API 端点。');
+            toggleSettings();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            updateTime();
+            setInterval(updateTime, 1000);
+            
+            fetchCurrentData();
+            fetchDailyData();
+            
+            setInterval(fetchCurrentData, config.pollInterval);
+            setInterval(fetchDailyData, 60000); // Update daily every minute
+        });
+    </script>
+</body>
+</html>

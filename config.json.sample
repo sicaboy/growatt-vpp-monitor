@@ -4,10 +4,12 @@
     "port": 502,
     "unit_id": 1
   },
+  "polling_interval": 5,
+  "history_size": 1000,
+  "log_file": "growatt_log.csv",
   "interval_seconds": 10,
   "output": {
-    "mode": "log",             
-    "log_file": "growatt_log.csv",
+    "mode": "both",             
     "mqtt": {
       "enabled": false,
       "host": "127.0.0.1",

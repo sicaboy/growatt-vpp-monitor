@@ -1,3 +1,6 @@
 venv/
 config.json
 growatt_log.csv
+api_server.log
+api_server.pid
+node_modules/
