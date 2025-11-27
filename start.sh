@@ -81,10 +81,9 @@ if ps -p $API_PID > /dev/null; then
     echo $API_PID > api_server.pid
     echo "PID已保存到 api_server.pid"
     
-    # 等待用户按Ctrl+C
     echo ""
-    echo "按 Ctrl+C 停止服务器..."
-    wait $API_PID
+    echo "✅ 服务器已在后台运行"
+    echo "📝 查看日志: tail -f api_server.log"
 else
     echo "❌ API服务器启动失败,请检查日志: api_server.log"
     exit 1
