@@ -337,34 +337,48 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       const sourceNode = nodeMap[link.source];
       const targetNode = nodeMap[link.target];
       
-      // 计算link的粗细：按照源节点高度的比例分配
+      // 计算link的粗细：同时考虑源节点和目标节点的比例
       const sourceTotal = sourceFlowTotals[link.source] || link.value;
-      const linkRatio = link.value / sourceTotal;
-      // 连接线宽度 = 节点可用高度 * 该连接占源节点流出的比例
-      const usableHeight = sourceNode.height - 10; // 留一点边距
-      const linkWidth = Math.max(2, linkRatio * usableHeight);
+      const targetTotal = targetFlowTotals[link.target] || link.value;
+      const sourceRatio = link.value / sourceTotal;
+      const targetRatio = link.value / targetTotal;
+      // 分别计算在源和目标节点的宽度
+      const sourceWidth = Math.max(2, sourceRatio * (sourceNode.height - 10));
+      const targetWidth = Math.max(2, targetRatio * (targetNode.height - 10));
+      
       
       // 计算起点和终点
       const x0 = sourceNode.x + sourceNode.width;
-      const y0 = sourceNode.y + nodeSourceOffset[link.source] + linkWidth / 2 + 5;
+      const y0 = sourceNode.y + nodeSourceOffset[link.source] + sourceWidth / 2 + 5;
       const x1 = targetNode.x;
-      const y1 = targetNode.y + nodeTargetOffset[link.target] + linkWidth / 2 + 5;
+      const y1 = targetNode.y + nodeTargetOffset[link.target] + targetWidth / 2 + 5;
+      // 源端和目标端的上下边界
+      const sy0 = y0 - sourceWidth / 2;
+      const sy1 = y0 + sourceWidth / 2;
+      const ty0 = y1 - targetWidth / 2;
+      const ty1 = y1 + targetWidth / 2;
       
       // 更新偏移
-      nodeSourceOffset[link.source] += linkWidth;
-      nodeTargetOffset[link.target] += linkWidth;
+      nodeSourceOffset[link.source] += sourceWidth;
+      nodeTargetOffset[link.target] += targetWidth;
 
       // 绘制贝塞尔曲线
       const curvature = 0.5;
       const xi = d3.interpolateNumber(x0, x1);
       const x2 = xi(curvature);
       const x3 = xi(1 - curvature);
-
+    
+      
+      // 绘制填充区域（四边形，用贝塞尔曲线连接）      
       g.append("path")
-        .attr("d", `M${x0},${y0} C${x2},${y0} ${x3},${y1} ${x1},${y1}`)
-        .attr("fill", "none")
-        .attr("stroke", `url(#gradient-${instanceId}-${i})`)
-        .attr("stroke-width", linkWidth)
+        .attr("d", `
+          M${x0},${sy0}
+          C${x2},${sy0} ${x3},${ty0} ${x1},${ty0}
+          L${x1},${ty1}
+          C${x3},${ty1} ${x2},${sy1} ${x0},${sy1}
+          Z
+        `)
+        .attr("fill", `url(#gradient-${instanceId}-${i})`)
         .attr("opacity", 0.9);
     });
 
