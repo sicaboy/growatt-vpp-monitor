@@ -194,16 +194,42 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
   }
 
   // 监听容器宽度变化
+  const initialWidthRef = useRef(null);
+  
   useEffect(() => {
-    if (containerRef.current) {
-      const resizeObserver = new ResizeObserver(entries => {
-        for (let entry of entries) {
-          setContainerWidth(entry.contentRect.width || 700);
-        }
-      });
-      resizeObserver.observe(containerRef.current);
-      return () => resizeObserver.disconnect();
+    // 判断是否是手机（屏幕宽度小于 1024px）
+    const isMobile = window.innerWidth < 1024;
+    
+    if (isMobile) {
+      // 手机上直接用屏幕宽度减去 padding（左右各24px容器padding + 12px内边距 + 安全边距）
+      const mobileWidth = window.innerWidth - 80;
+      setContainerWidth(mobileWidth);
+      initialWidthRef.current = mobileWidth;
+    } else if (containerRef.current) {
+      // 电脑上用容器实际宽度
+      const width = containerRef.current.getBoundingClientRect().width;
+      if (width > 0) {
+        setContainerWidth(width);
+        initialWidthRef.current = width;
+      }
     }
+    
+    // 监听窗口 resize
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        const mobileWidth = window.innerWidth - 80;
+        setContainerWidth(mobileWidth);
+      } else if (containerRef.current) {
+        const width = containerRef.current.getBoundingClientRect().width;
+        if (width > 0) {
+          setContainerWidth(width);
+        }
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // D3 绘制
@@ -224,7 +250,8 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       .attr("transform", `translate(${margin.left},${margin.top})`);
 
     // 定义节点：左边3个输入，右边3个输出
-    const nodeWidth = 90;
+    // 节点宽度根据容器宽度自适应：小屏幕用更窄的节点
+    const nodeWidth = Math.min(90, Math.max(60, containerWidth * 0.12));
     const nodeMinHeight = Math.min(50, (innerHeight - 30) / 3 - 10);
     
     // 计算左侧节点高度（按值比例，但有最小高度）
@@ -444,8 +471,8 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
   }
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height }}>
-      <svg ref={svgRef}></svg>
+    <div ref={containerRef} style={{ width: "100%", height, overflow: "hidden" }}>
+      <svg ref={svgRef} style={{ maxWidth: "100%", display: "block" }}></svg>
     </div>
   );
 };
@@ -521,9 +548,7 @@ const RealtimeSection = ({ currentData, error }) => {
        {/* 右侧：Sankey图 - 占2列 */}
         <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-3 overflow-hidden">
           <h3 className="text-gray-400 text-xs font-medium mb-1">能量流向</h3>
-          <div className="max-h-[300px]">
-            <SankeyFlow data={currentData} height={280} instanceId="realtime" />
-          </div>
+          <SankeyFlow data={currentData} height={280} instanceId="realtime" />
         </div>
       </div>
     </SectionContainer>
