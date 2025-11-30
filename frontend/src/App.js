@@ -579,6 +579,7 @@ const RealtimeSection = ({ currentData, error }) => {
   // const batteryToHome = true;
   // const gridToHome = true;
   // const solarToGrid = true;
+  // const batteryToGrid = true;
   // ========== DUMMY 数据结束 ==========
   
   
@@ -587,6 +588,15 @@ const RealtimeSection = ({ currentData, error }) => {
   const batteryToHome = currentData.battery_discharge > 0.01 && currentData.load > 0.01;
   const gridToHome = currentData.grid_import > 0.01 && currentData.load > 0.01;
   const solarToGrid = currentData.solar > 0.01 && currentData.grid_export > 0.01;
+  const batteryToGrid = currentData.battery_discharge > 0.01 && currentData.grid_export > 0.01;
+  
+  // 计算各条线的功率值（用于动画速度）
+  const solarToHomePower = Math.min(currentData.solar, currentData.load);
+  const solarToBatteryPower = currentData.battery_charge;
+  const solarToGridPower = currentData.grid_export;
+  const gridToHomePower = currentData.grid_import;
+  const batteryToHomePower = currentData.battery_discharge;
+  const batteryToGridPower = Math.min(currentData.battery_discharge, currentData.grid_export);
   
   
   return (
@@ -620,8 +630,10 @@ const RealtimeSection = ({ currentData, error }) => {
         <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden" style={{ height: '320px' }}>
           <SolarHouse3D
             solar={data.solar}
-            grid={data.grid_import - data.grid_export}
-            battery={data.battery_charge - data.battery_discharge}
+            gridImport={data.grid_import}
+            gridExport={data.grid_export}
+            batteryCharge={data.battery_charge}
+            batteryDischarge={data.battery_discharge}
             load={data.load}
             batteryPercent={data.soc_inv || data.soc_bms || 0}
             solarToHome={solarToHome}
@@ -629,6 +641,13 @@ const RealtimeSection = ({ currentData, error }) => {
             batteryToHome={batteryToHome}
             gridToHome={gridToHome}
             solarToGrid={solarToGrid}
+            batteryToGrid={batteryToGrid}
+            solarToHomePower={solarToHomePower}
+            solarToBatteryPower={solarToBatteryPower}
+            solarToGridPower={solarToGridPower}
+            gridToHomePower={gridToHomePower}
+            batteryToHomePower={batteryToHomePower}
+            batteryToGridPower={batteryToGridPower}
           />
         </div>
 

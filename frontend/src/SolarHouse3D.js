@@ -7,10 +7,22 @@ const formatPower = (value) => {
   return { value: value.toFixed(2), unit: 'kW' };
 };
 
+// 根据功率计算动画速度 (功率越大越快)
+const getFlowDuration = (power, minDur = 1, maxDur = 4) => {
+  const absPower = Math.abs(power);
+  if (absPower <= 0.01) return maxDur;
+  const maxPower = 6;
+  const ratio = Math.min(absPower / maxPower, 1);
+  const duration = maxDur - ratio * (maxDur - minDur);
+  return duration.toFixed(1);
+};
+
 const SolarHouse3D = ({ 
   solar = 0,
-  grid = 0,
-  battery = 0,
+  gridImport = 0,
+  gridExport = 0,
+  batteryCharge = 0,
+  batteryDischarge = 0,
   load = 0,
   batteryPercent = 0,
   // 能量流动状态
@@ -19,6 +31,14 @@ const SolarHouse3D = ({
   batteryToHome = false,
   gridToHome = false,
   solarToGrid = false,
+  batteryToGrid = false,
+  // 各条线的功率值（用于动画速度）
+  solarToHomePower = 0,
+  solarToBatteryPower = 0,
+  solarToGridPower = 0,
+  gridToHomePower = 0,
+  batteryToHomePower = 0,
+  batteryToGridPower = 0,
 }) => {
   const containerRef = useRef(null);
   const sceneRef = useRef(null);
@@ -29,8 +49,10 @@ const SolarHouse3D = ({
 
   // 格式化各个功率值
   const solarFormatted = formatPower(solar);
-  const gridFormatted = formatPower(Math.abs(grid));
-  const batteryFormatted = formatPower(Math.abs(battery));
+  const gridInFormatted = formatPower(gridImport);
+  const gridOutFormatted = formatPower(gridExport);
+  const chargeFormatted = formatPower(batteryCharge);
+  const dischargeFormatted = formatPower(batteryDischarge);
   const loadFormatted = formatPower(load);
 
   useEffect(() => {
@@ -486,28 +508,40 @@ const SolarHouse3D = ({
 
   return (
     <div className="relative w-full h-full min-h-[280px]" style={{ background: '#2d323d' }}>
-      {/* Labels - 紧凑版 */}
-      <div className="absolute top-[15px] left-[10px] text-white z-10">
+      {/* Labels - 6个标签 */}
+      <div className="absolute top-[10px] left-[10px] text-white z-10">
         <div className="text-[10px] text-white/50">Solar</div>
-        <div className="text-[14px] font-semibold">
+        <div className="text-[14px] font-semibold text-yellow-400">
           {solarFormatted.value} <span className="text-[10px] font-normal opacity-85">{solarFormatted.unit}</span>
         </div>
       </div>
-      <div className="absolute top-[70px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Grid</div>
-        <div className="text-[14px] font-semibold">
-          {gridFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridFormatted.unit}</span>
+      <div className="absolute top-[50px] left-[10px] text-white z-10">
+        <div className="text-[10px] text-white/50">Grid In</div>
+        <div className="text-[14px] font-semibold text-blue-400">
+          {gridInFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridInFormatted.unit}</span>
         </div>
       </div>
-      <div className="absolute top-[135px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Battery</div>
-        <div className="text-[14px] font-semibold">
-          {batteryFormatted.value} <span className="text-[10px] font-normal opacity-85">{batteryFormatted.unit}</span>
+      <div className="absolute top-[90px] left-[10px] text-white z-10">
+        <div className="text-[10px] text-white/50">Grid Out</div>
+        <div className="text-[14px] font-semibold text-green-400">
+          {gridOutFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridOutFormatted.unit}</span>
         </div>
       </div>
-      <div className="absolute top-[200px] left-[10px] text-white z-10">
+      <div className="absolute top-[140px] left-[10px] text-white z-10">
+        <div className="text-[10px] text-white/50">Battery Charge</div>
+        <div className="text-[14px] font-semibold text-cyan-400">
+          {chargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{chargeFormatted.unit}</span>
+        </div>
+      </div>
+      <div className="absolute top-[180px] left-[10px] text-white z-10">
+        <div className="text-[10px] text-white/50">Battery Discharge</div>
+        <div className="text-[14px] font-semibold text-cyan-400">
+          {dischargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{dischargeFormatted.unit}</span>
+        </div>
+      </div>
+      <div className="absolute top-[220px] left-[10px] text-white z-10">
         <div className="text-[10px] text-white/50">Load</div>
-        <div className="text-[14px] font-semibold">
+        <div className="text-[14px] font-semibold text-purple-400">
           {loadFormatted.value} <span className="text-[10px] font-normal opacity-85">{loadFormatted.unit}</span>
         </div>
       </div>
@@ -524,7 +558,7 @@ const SolarHouse3D = ({
             stroke-width: 2;
             stroke-linecap: round;
             fill: none;
-            stroke-dasharray: 6 8;
+            stroke-dasharray: 6 4; 
           }
           .flow-solar {
             stroke: #fbbf24;
@@ -538,43 +572,96 @@ const SolarHouse3D = ({
             stroke: #60a5fa;
             filter: drop-shadow(0 0 4px #60a5fa);
           }
-          .flow-down {
-            animation: flowDown 1.5s linear infinite;
+          
+          /* 箭头文字样式 - 居中在线上 */
+          .arrow-text {
+            font-size: 14px;
+            font-weight: bold;
+            text-anchor: middle;
           }
-          .flow-right {
-            animation: flowRight 1.5s linear infinite;
-          }
-          @keyframes flowDown {
-            0% { stroke-dashoffset: 28; }
-            100% { stroke-dashoffset: 0; }
-          }
-          @keyframes flowRight {
-            0% { stroke-dashoffset: 28; }
-            100% { stroke-dashoffset: 0; }
-          }
+          .arrow-solar { fill: #fbbf24; }
+          .arrow-battery { fill: #00e8bb; }
+          .arrow-grid { fill: #60a5fa; }
         `}</style>
         
-        {/* Label connection lines - 调整后的坐标 */}
-        {/* <polyline className="conn-line" points="55,22 75,22 75,55 195,55" />
-        <polyline className="conn-line" points="55,77 95,77" />
-        <polyline className="conn-line" points="55,145 100,145" />
-        <polyline className="conn-line" points="55,210 75,210 75,195 205,195" /> */}
+        {/* Energy flow lines with animated arrows on the line */}
         
-        {/* Energy flow lines - 紧凑版坐标 280,140 280,192 185,192*/}
+        {/* Solar → Grid */}
         {solarToGrid && (
-          <polyline className="energy-flow flow-solar flow-down" points="250,90 250,70 155,70" />
+          <g>
+            <path id="pathSolarGrid" d="M250,90 L250,70 L155,70" className="energy-flow flow-solar" />
+            <text className="arrow-text arrow-solar" dy="0.3em">
+              <textPath href="#pathSolarGrid" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToGridPower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
         )}
+        
+        {/* Solar → Home */}
         {solarToHome && (
-          <polyline className="energy-flow flow-solar flow-down" points="265,148 265,176 240,176" />
+          <g>
+            <path id="pathSolarHome" d="M265,148 L265,176 L240,176" className="energy-flow flow-solar" />
+            <text className="arrow-text arrow-solar" dy="0.3em">
+              <textPath href="#pathSolarHome" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToHomePower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
         )}
+        
+        {/* Solar → Battery */}
         {solarToBattery && (
-          <polyline className="energy-flow flow-solar flow-down" points="250,135 175,135 175,155" />
+          <g>
+            <path id="pathSolarBattery" d="M250,135 L175,135 L175,155" className="energy-flow flow-solar" />
+            <text className="arrow-text arrow-solar" dy="0.3em">
+              <textPath href="#pathSolarBattery" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToBatteryPower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
         )}
+        
+        {/* Grid → Home */}
         {gridToHome && (
-          <polyline className="energy-flow flow-grid flow-right" points="190,169 220,169" />
+          <g>
+            <path id="pathGridHome" d="M190,169 L220,169" className="energy-flow flow-grid" />
+            <text className="arrow-text arrow-grid" dy="0.3em">
+              <textPath href="#pathGridHome" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(gridToHomePower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
         )}
+        
+        {/* Battery → Home */}
         {batteryToHome && (
-          <polyline className="energy-flow flow-battery flow-right" points="180,183 220,183" />
+          <g>
+            <path id="pathBatteryHome" d="M180,187 L220,187" className="energy-flow flow-battery" />
+            <text className="arrow-text arrow-battery" dy="0.3em">
+              <textPath href="#pathBatteryHome" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(batteryToHomePower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
+        )}
+        
+        {/* Battery → Grid */}
+        {batteryToGrid && (
+          <g>
+            <path id="pathBatteryGrid" d="M170,152 L170,100 L155,100" className="energy-flow flow-battery" />
+            <text className="arrow-text arrow-battery" dy="0.3em">
+              <textPath href="#pathBatteryGrid" startOffset="50%">
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(batteryToGridPower)}s`} repeatCount="indefinite" />
+                ›
+              </textPath>
+            </text>
+          </g>
         )}
       </svg>
 
