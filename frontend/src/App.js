@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import * as d3 from 'd3';
 import SolarHouse3D from './SolarHouse3D';
+import WeatherDisplay from './WeatherDisplay';
 
 // ============================================================
 // 配置 - 修改这里的 API 地址
@@ -627,7 +628,10 @@ const RealtimeSection = ({ currentData, error }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* 左侧：3D 房屋模型 - 占1列 */}
-        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden h-[260px] lg:h-[320px]">
+        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden h-[260px] lg:h-[320px] relative">
+          {/* 天气显示 */}
+          <WeatherDisplay latitude={-37.8136} longitude={144.9631} />
+          
           <SolarHouse3D
             solar={data.solar}
             gridImport={data.grid_import}
