@@ -7,6 +7,7 @@ Features:
 - Monthly CSV archiving (persistent storage)
 - Automatic multi-file query support
 - Real-time Modbus polling
+- Accurate kWh calculation using actual time intervals
 """
 
 import os
@@ -497,7 +498,17 @@ def get_daily_range():
 
 
 def calculate_daily_totals(target_date):
-    """Calculate daily totals from CSV files or memory"""
+    """
+    Calculate daily totals from CSV files or memory.
+    
+    Uses ACTUAL time intervals between consecutive data points for accurate
+    kWh calculation, instead of assuming a fixed polling interval.
+    
+    Energy (kWh) = Power (kW) × Time (hours)
+    
+    For each pair of consecutive readings, we use the first reading's power
+    multiplied by the actual time elapsed until the next reading.
+    """
     totals = {
         "date": target_date.isoformat(),
         "solar_kwh": 0,
@@ -506,37 +517,78 @@ def calculate_daily_totals(target_date):
         "grid_import_kwh": 0,
         "battery_charge_kwh": 0,
         "battery_discharge_kwh": 0,
-        "count": 0
+        "count": 0,
+        "avg_interval_sec": 0  # For debugging
     }
     
-    interval_hours = config["polling_interval"] / 3600.0
+    # Collect all data for the target date
+    data_points = []
     
-    # Get relevant CSV file
+    # Get relevant CSV file(s)
     files = get_log_files_for_date_range(target_date, target_date)
     
     if files:
         for filepath in files:
-            data = read_csv_data(filepath, target_date, target_date)
-            for row in data:
-                totals["solar_kwh"] += row["solar"] * interval_hours
-                totals["load_kwh"] += row["load"] * interval_hours
-                totals["grid_export_kwh"] += row["grid_export"] * interval_hours
-                totals["grid_import_kwh"] += row["grid_import"] * interval_hours
-                totals["battery_charge_kwh"] += row["battery_charge"] * interval_hours
-                totals["battery_discharge_kwh"] += row["battery_discharge"] * interval_hours
-                totals["count"] += 1
+            file_data = read_csv_data(filepath, target_date, target_date)
+            data_points.extend(file_data)
     else:
         # Fallback to in-memory data
         with data_lock:
             for d in historical_data:
                 if datetime.fromisoformat(d["timestamp"]).date() == target_date:
-                    totals["solar_kwh"] += d["solar"] * interval_hours
-                    totals["load_kwh"] += d["load"] * interval_hours
-                    totals["grid_export_kwh"] += d["grid_export"] * interval_hours
-                    totals["grid_import_kwh"] += d["grid_import"] * interval_hours
-                    totals["battery_charge_kwh"] += d["battery_charge"] * interval_hours
-                    totals["battery_discharge_kwh"] += d["battery_discharge"] * interval_hours
-                    totals["count"] += 1
+                    data_points.append(d.copy())
+    
+    # Sort by timestamp to ensure correct order
+    data_points.sort(key=lambda x: x["timestamp"])
+    
+    totals["count"] = len(data_points)
+    
+    if len(data_points) < 2:
+        # Not enough data points to calculate intervals
+        return totals
+    
+    # Calculate using actual time intervals
+    total_interval_sec = 0
+    interval_count = 0
+    
+    for i in range(len(data_points) - 1):
+        current = data_points[i]
+        next_point = data_points[i + 1]
+        
+        # Calculate actual time interval
+        t1 = datetime.fromisoformat(current["timestamp"])
+        t2 = datetime.fromisoformat(next_point["timestamp"])
+        interval_sec = (t2 - t1).total_seconds()
+        
+        # Skip if interval is unreasonably large (e.g., > 10 minutes = gap in data)
+        # or negative (data ordering issue)
+        if interval_sec <= 0 or interval_sec > 600:
+            continue
+        
+        interval_hours = interval_sec / 3600.0
+        
+        # Accumulate energy using current point's power × time interval
+        totals["solar_kwh"] += current["solar"] * interval_hours
+        totals["load_kwh"] += current["load"] * interval_hours
+        totals["grid_export_kwh"] += current["grid_export"] * interval_hours
+        totals["grid_import_kwh"] += abs(current["grid_import"]) * interval_hours
+        totals["battery_charge_kwh"] += current["battery_charge"] * interval_hours
+        totals["battery_discharge_kwh"] += current["battery_discharge"] * interval_hours
+        
+        total_interval_sec += interval_sec
+        interval_count += 1
+    
+    # Calculate average interval for debugging
+    if interval_count > 0:
+        totals["avg_interval_sec"] = round(total_interval_sec / interval_count, 1)
+    
+    # Round all kWh values to 2 decimal places
+    totals["solar_kwh"] = round(totals["solar_kwh"], 2)
+    totals["load_kwh"] = round(totals["load_kwh"], 2)
+    totals["grid_export_kwh"] = round(totals["grid_export_kwh"], 2)
+    totals["grid_import_kwh"] = round(totals["grid_import_kwh"], 2)
+    totals["battery_charge_kwh"] = round(totals["battery_charge_kwh"], 2)
+    totals["battery_discharge_kwh"] = round(totals["battery_discharge_kwh"], 2)
     
     return totals
 
