@@ -7,14 +7,37 @@ const formatPower = (value) => {
   return { value: value.toFixed(2), unit: 'kW' };
 };
 
-// 根据功率计算动画速度 (功率越大越快)
-const getFlowDuration = (power, minDur = 1, maxDur = 4) => {
+// 根据功率计算动画速度 (功率越大速度越快，单位：像素/秒)
+const getFlowSpeed = (power) => {
   const absPower = Math.abs(power);
-  if (absPower <= 0.01) return maxDur;
+  if (absPower <= 0.01) return 20; // 最慢速度
   const maxPower = 6;
+  const minSpeed = 10;  // 最慢：10 像素/秒
+  const maxSpeed = 50; // 最快：50 像素/秒
   const ratio = Math.min(absPower / maxPower, 1);
-  const duration = maxDur - ratio * (maxDur - minDur);
-  return duration.toFixed(1);
+  const speed = minSpeed + ratio * (maxSpeed - minSpeed);
+  return speed;
+};
+
+// 计算路径长度（近似值）
+const getPathLength = (pathId) => {
+  const pathLengths = {
+    'pathSolarGrid': 115,      // M250,90 L250,70 L155,70
+    'pathSolarHome': 62,       // M265,148 L265,176 L240,176
+    'pathSolarBattery': 95,    // M250,135 L175,135 L175,155
+    'pathGridHome': 30,        // M190,169 L220,169
+    'pathBatteryHome': 40,     // M180,187 L220,187
+    'pathBatteryGrid': 104,    // M170,152 L170,100 L155,100
+  };
+  return pathLengths[pathId] || 50;
+};
+
+// 根据路径长度和速度计算动画时长
+const getAnimationDuration = (pathId, power) => {
+  const pathLength = getPathLength(pathId);
+  const speed = getFlowSpeed(power);
+  const duration = pathLength / speed;
+  return duration.toFixed(2);
 };
 
 const SolarHouse3D = ({ 
@@ -592,7 +615,7 @@ const SolarHouse3D = ({
             <path id="pathSolarGrid" d="M250,90 L250,70 L155,70" className="energy-flow flow-solar" />
             <text className="arrow-text arrow-solar" dy="0.3em">
               <textPath href="#pathSolarGrid" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToGridPower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarGrid', solarToGridPower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
@@ -605,7 +628,7 @@ const SolarHouse3D = ({
             <path id="pathSolarHome" d="M265,148 L265,176 L240,176" className="energy-flow flow-solar" />
             <text className="arrow-text arrow-solar" dy="0.3em">
               <textPath href="#pathSolarHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToHomePower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarHome', solarToHomePower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
@@ -618,7 +641,7 @@ const SolarHouse3D = ({
             <path id="pathSolarBattery" d="M250,135 L175,135 L175,155" className="energy-flow flow-solar" />
             <text className="arrow-text arrow-solar" dy="0.3em">
               <textPath href="#pathSolarBattery" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(solarToBatteryPower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarBattery', solarToBatteryPower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
@@ -631,7 +654,7 @@ const SolarHouse3D = ({
             <path id="pathGridHome" d="M190,169 L220,169" className="energy-flow flow-grid" />
             <text className="arrow-text arrow-grid" dy="0.3em">
               <textPath href="#pathGridHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(gridToHomePower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathGridHome', gridToHomePower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
@@ -644,7 +667,7 @@ const SolarHouse3D = ({
             <path id="pathBatteryHome" d="M180,187 L220,187" className="energy-flow flow-battery" />
             <text className="arrow-text arrow-battery" dy="0.3em">
               <textPath href="#pathBatteryHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(batteryToHomePower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathBatteryHome', batteryToHomePower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
@@ -657,7 +680,7 @@ const SolarHouse3D = ({
             <path id="pathBatteryGrid" d="M170,152 L170,100 L155,100" className="energy-flow flow-battery" />
             <text className="arrow-text arrow-battery" dy="0.3em">
               <textPath href="#pathBatteryGrid" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getFlowDuration(batteryToGridPower)}s`} repeatCount="indefinite" />
+                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathBatteryGrid', batteryToGridPower)}s`} repeatCount="indefinite" />
                 ›
               </textPath>
             </text>
