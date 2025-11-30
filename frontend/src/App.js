@@ -778,6 +778,13 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
   const dateRangeText = startDate === endDate ? startDate : `${startDate} ~ ${endDate}`;
   const isMultiDay = dailyData.length > 1;
 
+  // 快捷按钮处理函数
+  const handleQuickSelect = (start, end) => {
+    onStartDateChange(start);
+    onEndDateChange(end);
+    onApply(start, end);
+  };
+
   return (
     <SectionContainer>
       {/* 标题和日期选择器在同一行 */}
@@ -806,7 +813,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
             className="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
           />
           <button
-            onClick={onApply}
+            onClick={() => onApply(startDate, endDate)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-medium transition-colors"
           >
             查询
@@ -814,9 +821,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
           <button
             onClick={() => {
               const today = getToday();
-              onStartDateChange(today);
-              onEndDateChange(today);
-              setTimeout(onApply, 0);
+              handleQuickSelect(today, today);
             }}
             className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
           >
@@ -824,12 +829,9 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
           </button>
           <button
             onClick={() => {
-              const today = new Date();
-              const weekAgo = new Date(today);
-              weekAgo.setDate(weekAgo.getDate() - 7);
-              onStartDateChange(formatDate(weekAgo));
-              onEndDateChange(formatDate(today));
-              setTimeout(onApply, 0);
+              const today = formatDate(new Date());
+              const weekAgo = formatDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+              handleQuickSelect(weekAgo, today);
             }}
             className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
           >
@@ -837,12 +839,9 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
           </button>
           <button
             onClick={() => {
-              const today = new Date();
-              const monthAgo = new Date(today);
-              monthAgo.setDate(monthAgo.getDate() - 30);
-              onStartDateChange(formatDate(monthAgo));
-              onEndDateChange(formatDate(today));
-              setTimeout(onApply, 0);
+              const today = formatDate(new Date());
+              const monthAgo = formatDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+              handleQuickSelect(monthAgo, today);
             }}
             className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
           >
