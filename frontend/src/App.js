@@ -834,7 +834,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
             }}
             className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
           >
-            7天
+            过去7天
           </button>
           <button
             onClick={() => {
@@ -844,7 +844,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
             }}
             className="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs transition-colors"
           >
-            30天
+            过去30天
           </button>
         </div>
       </div>
