@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import * as d3 from 'd3';
+import SolarHouse3D from './SolarHouse3D';
 
 // ============================================================
 // 配置 - 修改这里的 API 地址
@@ -130,8 +131,36 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
     battery_net = 0 
   } = data || {};
 
-  const batteryOut = battery_discharge > 0.001 ? battery_discharge : Math.max(0, -battery_net);
-  const batteryIn = battery_charge > 0.001 ? battery_charge : Math.max(0, battery_net);
+  // 计算电池净值：避免同时显示充电和放电
+  // 如果有 battery_net，用它来决定方向
+  // 否则用 battery_charge 和 battery_discharge 的差值
+  let batteryIn = 0;
+  let batteryOut = 0;
+  
+  if (battery_net !== undefined && Math.abs(battery_net) > 0.001) {
+    // 有 battery_net 值，用它决定方向
+    if (battery_net > 0) {
+      batteryIn = battery_net;  // 正值表示充电
+      batteryOut = 0;
+    } else {
+      batteryIn = 0;
+      batteryOut = -battery_net;  // 负值表示放电
+    }
+  } else {
+    // 没有 battery_net，用充放电差值
+    const netCharge = battery_charge - battery_discharge;
+    if (netCharge > 0.001) {
+      batteryIn = netCharge;  // 净充电
+      batteryOut = 0;
+    } else if (netCharge < -0.001) {
+      batteryIn = 0;
+      batteryOut = -netCharge;  // 净放电
+    } else {
+      // 充放电基本相等，都显示为0
+      batteryIn = 0;
+      batteryOut = 0;
+    }
+  }
 
   // 总输入和总输出
   const totalInput = solar + batteryOut + grid_import;
@@ -528,14 +557,57 @@ const StatCard = ({ title, value, unit, icon, color, subtitle }) => {
 // 模块一：实时监控
 // ============================================================
 const RealtimeSection = ({ currentData, error }) => {
+  // ========== DUMMY 数据 - 调试用，调完后删除 ==========
+  const dummyData = {
+    solar: 5.5,
+    grid_import: 0.8,
+    grid_export: 0.3,
+    battery_charge: 1.2,
+    battery_discharge: 0.5,
+    load: 4.2,
+    soc_inv: 77,
+    timestamp: new Date().toISOString()
+  };
+  
+  // 使用 dummy 数据（调试完后改回 currentData）
+  //const data = dummyData;  // 改回 currentData 使用真实数据
+  const data = currentData;
+  
+  // 强制所有流动线可见（调试用）
+  // const solarToHome = true;
+  // const solarToBattery = true;
+  // const batteryToHome = true;
+  // const gridToHome = true;
+  // const solarToGrid = true;
+  // ========== DUMMY 数据结束 ==========
+  
+  
+  const solarToHome = currentData.solar > 0.01 && currentData.load > 0.01;
+  const solarToBattery = currentData.solar > 0.01 && currentData.battery_charge > 0.01;
+  const batteryToHome = currentData.battery_discharge > 0.01 && currentData.load > 0.01;
+  const gridToHome = currentData.grid_import > 0.01 && currentData.load > 0.01;
+  const solarToGrid = currentData.solar > 0.01 && currentData.grid_export > 0.01;
+  
   
   return (
     <SectionContainer>
-      <SectionTitle 
-        icon="⚡" 
-        title="实时监控" 
-        subtitle={currentData.timestamp ? `最后更新: ${new Date(currentData.timestamp).toLocaleTimeString('zh-CN')}` : '等待数据...'}
-      />
+      {/* 标题行：左边标题，右边电池状态 */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <span className="text-xl">⚡</span>
+            <span>实时监控</span>
+          </h2>
+          <p className="text-gray-400 text-xs">
+            {data.timestamp ? `最后更新: ${new Date(data.timestamp).toLocaleTimeString('zh-CN')}` : '等待数据...'}
+          </p>
+        </div>
+        
+        {/* 电池状态 */}
+        <div className="flex items-center gap-3">
+          <BatteryCard title="SOC" value={data.soc_inv} />
+        </div>
+      </div>
       
       {error && (
         <div className="mb-3 px-3 py-1.5 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
@@ -544,28 +616,26 @@ const RealtimeSection = ({ currentData, error }) => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {/* 左侧：数据卡片 - 占1列 */}
-        <div className="lg:col-span-1 space-y-2">
-          <h3 className="text-gray-400 text-xs font-medium">功率数据 (kW)</h3>
-          <div className="grid grid-cols-2 gap-1.5">
-            <MiniStatCard title="Solar" value={currentData.solar} icon="☀️" color="yellow" />
-            <MiniStatCard title="Load" value={currentData.load} icon="🏠" color="purple" />
-            <MiniStatCard title="Batt In" value={currentData.battery_charge} icon="🔋↓" color="cyan" />
-            <MiniStatCard title="Batt Out" value={currentData.battery_discharge} icon="🔋↑" color="cyan" />
-            <MiniStatCard title="Grid In" value={currentData.grid_import} icon="⬇️" color="blue" />
-            <MiniStatCard title="Grid Out" value={currentData.grid_export} icon="⬆️" color="green" />
-          </div>
-          
-          <h3 className="text-gray-400 text-xs font-medium">电池状态</h3>
-          <div className="grid grid-cols-2 gap-1.5">
-            <BatteryCard title="SOC INV" value={currentData.soc_inv} />
-          </div>
+        {/* 左侧：3D 房屋模型 - 占1列 */}
+        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden" style={{ height: '320px' }}>
+          <SolarHouse3D
+            solar={data.solar}
+            grid={data.grid_import - data.grid_export}
+            battery={data.battery_charge - data.battery_discharge}
+            load={data.load}
+            batteryPercent={data.soc_inv || data.soc_bms || 0}
+            solarToHome={solarToHome}
+            solarToBattery={solarToBattery}
+            batteryToHome={batteryToHome}
+            gridToHome={gridToHome}
+            solarToGrid={solarToGrid}
+          />
         </div>
 
-       {/* 右侧：Sankey图 - 占2列 */}
+        {/* 右侧：Sankey图 - 占2列 */}
         <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-3 overflow-hidden">
           <h3 className="text-gray-400 text-xs font-medium mb-1">能量流向</h3>
-          <SankeyFlow data={currentData} height={280} instanceId="realtime" />
+          <SankeyFlow data={data} height={280} instanceId="realtime" />
         </div>
       </div>
     </SectionContainer>
