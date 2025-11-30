@@ -615,7 +615,7 @@ const RealtimeSection = ({ currentData, error }) => {
         
         {/* 电池状态 */}
         <div className="flex items-center gap-3">
-          <BatteryCard title="SOC" value={data.soc_inv} />
+          <BatteryCard title="" value={data.soc_inv} />
         </div>
       </div>
       
@@ -627,7 +627,7 @@ const RealtimeSection = ({ currentData, error }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* 左侧：3D 房屋模型 - 占1列 */}
-        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden" style={{ height: '320px' }}>
+        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden h-[260px] lg:h-[320px]">
           <SolarHouse3D
             solar={data.solar}
             gridImport={data.grid_import}
@@ -741,14 +741,11 @@ const BatteryCard = ({ title, value }) => {
           fill={color}/>
       </svg>
       
-      {/* 文字信息 */}
-      <div>
-        <p className="text-gray-400 text-xs">{title}</p>
-        <p className="text-white text-lg font-bold">
-          {percentage.toFixed(0)}
-          <span className="text-sm ml-0.5">%</span>
-        </p>
-      </div>
+      {/* 文字信息 - 无title时只显示百分比 */}
+      <p className="text-white text-lg font-bold">
+        {percentage.toFixed(0)}
+        <span className="text-sm ml-0.5">%</span>
+      </p>
     </div>
   );
 };
@@ -1404,11 +1401,11 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4 md:p-6">
+    <div className="min-h-screen bg-gray-950 text-white p-3 md:p-6">
       {/* 头部 */}
-      <div className="max-w-7xl mx-auto mb-6">
+      <div className="max-w-7xl mx-auto mb-4 md:mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+          <h1 className="text-xl md:text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
             ☀️ Growatt Solar Dashboard
           </h1>
           <div className="flex items-center gap-4">
@@ -1424,7 +1421,7 @@ function App() {
       </div>
 
       {/* 三个模块 */}
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
         {/* 模块一：实时监控 */}
         <RealtimeSection currentData={currentData} error={realtimeError} />
 
