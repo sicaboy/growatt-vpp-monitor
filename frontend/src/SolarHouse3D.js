@@ -570,7 +570,7 @@ const SolarHouse3D = ({
       </div>
 
       {/* SVG Connection Lines - 调整为紧凑版viewBox */}
-      <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 320" preserveAspectRatio="xMidYMid meet">
+      <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 320" preserveAspectRatio="none">
         <style>{`
           .conn-line {
             stroke: rgba(255,255,255,0.4);
@@ -625,7 +625,7 @@ const SolarHouse3D = ({
         {/* Solar → Home */}
         {solarToHome && (
           <g>
-            <path id="pathSolarHome" d="M265,148 L265,176 L240,176" className="energy-flow flow-solar" />
+            <path id="pathSolarHome" d="M265,148 L265,176 L233,176" className="energy-flow flow-solar" />
             <text className="arrow-text arrow-solar" dy="0.3em">
               <textPath href="#pathSolarHome" startOffset="50%">
                 <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarHome', solarToHomePower)}s`} repeatCount="indefinite" />
@@ -664,7 +664,7 @@ const SolarHouse3D = ({
         {/* Battery → Home */}
         {batteryToHome && (
           <g>
-            <path id="pathBatteryHome" d="M180,187 L220,187" className="energy-flow flow-battery" />
+            <path id="pathBatteryHome" d="M182,187 L220,187" className="energy-flow flow-battery" />
             <text className="arrow-text arrow-battery" dy="0.3em">
               <textPath href="#pathBatteryHome" startOffset="50%">
                 <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathBatteryHome', batteryToHomePower)}s`} repeatCount="indefinite" />

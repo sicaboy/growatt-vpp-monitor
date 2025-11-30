@@ -582,8 +582,7 @@ const RealtimeSection = ({ currentData, error }) => {
   // const solarToGrid = true;
   // const batteryToGrid = true;
   // ========== DUMMY 数据结束 ==========
-  
-  
+    
   const solarToHome = currentData.solar > 0.01 && currentData.load > 0.01;
   const solarToBattery = currentData.solar > 0.01 && currentData.battery_charge > 0.01;
   const batteryToHome = currentData.battery_discharge > 0.01 && currentData.load > 0.01;
@@ -628,7 +627,7 @@ const RealtimeSection = ({ currentData, error }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         {/* 左侧：3D 房屋模型 - 占1列 */}
-        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden h-[260px] lg:h-[320px] relative">
+        <div className="lg:col-span-1 bg-gray-800/50 rounded-xl overflow-hidden h-[220px] lg:h-[260px] relative">
           {/* 天气显示 */}
           <WeatherDisplay latitude={-37.8136} longitude={144.9631} />
           
@@ -658,7 +657,7 @@ const RealtimeSection = ({ currentData, error }) => {
         {/* 右侧：Sankey图 - 占2列 */}
         <div className="lg:col-span-2 bg-gray-800/50 rounded-xl p-3 overflow-hidden">
           <h3 className="text-gray-400 text-xs font-medium mb-1">能量流向 <span className="text-gray-500">(kW)</span></h3>
-          <SankeyFlow data={data} height={280} instanceId="realtime" />
+          <SankeyFlow data={data} height={220} instanceId="realtime" />
         </div>
       </div>
     </SectionContainer>
