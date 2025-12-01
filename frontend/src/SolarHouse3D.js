@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import EnergyFlowCanvas from './EnergyFlowCanvas';
 
 // 格式化功率显示 - 统一使用 kW
 const formatPower = (value) => {
@@ -592,120 +593,36 @@ const SolarHouse3D = ({
       <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 320" preserveAspectRatio="none">
         <style>{`
           .conn-line {
-            stroke: rgba(255,255,255,0.4);
+            stroke: rgba(255,255,255,0.2);
             stroke-width: 1;
             fill: none;
           }
-          .energy-flow {
-            stroke-width: 2;
-            stroke-linecap: round;
-            fill: none;
-            stroke-dasharray: 6 4; 
-          }
-          .flow-solar {
-            stroke: #fbbf24;
-            filter: drop-shadow(0 0 4px #fbbf24);
-          }
-          .flow-battery {
-            stroke: #00e8bb;
-            filter: drop-shadow(0 0 4px #00e8bb);
-          }
-          .flow-grid {
-            stroke: #60a5fa;
-            filter: drop-shadow(0 0 4px #60a5fa);
-          }
-          
-          /* 箭头文字样式 - 居中在线上 */
-          .arrow-text {
-            font-size: 14px;
-            font-weight: bold;
-            text-anchor: middle;
-          }
-          .arrow-solar { fill: #fbbf24; }
-          .arrow-battery { fill: #00e8bb; }
-          .arrow-grid { fill: #60a5fa; }
         `}</style>
         
-        {/* Energy flow lines with animated arrows on the line */}
-        
-        {/* Solar → Grid */}
-        {solarToGrid && (
-          <g>
-            <path id="pathSolarGrid" d="M250,90 L250,70 L155,70" className="energy-flow flow-solar" />
-            <text className="arrow-text arrow-solar" dy="0.3em">
-              <textPath href="#pathSolarGrid" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarGrid', solarToGridPower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
-        
-        {/* Solar → Home */}
-        {solarToHome && (
-          <g>
-            <path id="pathSolarHome" d="M265,148 L265,176 L233,176" className="energy-flow flow-solar" />
-            <text className="arrow-text arrow-solar" dy="0.3em">
-              <textPath href="#pathSolarHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarHome', solarToHomePower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
-        
-        {/* Solar → Battery */}
-        {solarToBattery && (
-          <g>
-            <path id="pathSolarBattery" d="M250,135 L175,135 L175,155" className="energy-flow flow-solar" />
-            <text className="arrow-text arrow-solar" dy="0.3em">
-              <textPath href="#pathSolarBattery" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathSolarBattery', solarToBatteryPower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
-        
-        {/* Grid → Home */}
-        {gridToHome && (
-          <g>
-            <path id="pathGridHome" d="M190,169 L220,169" className="energy-flow flow-grid" />
-            <text className="arrow-text arrow-grid" dy="0.3em">
-              <textPath href="#pathGridHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathGridHome', gridToHomePower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
-        
-        {/* Battery → Home */}
-        {batteryToHome && (
-          <g>
-            <path id="pathBatteryHome" d="M182,187 L220,187" className="energy-flow flow-battery" />
-            <text className="arrow-text arrow-battery" dy="0.3em">
-              <textPath href="#pathBatteryHome" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathBatteryHome', batteryToHomePower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
-        
-        {/* Battery → Grid */}
-        {batteryToGrid && (
-          <g>
-            <path id="pathBatteryGrid" d="M170,152 L170,100 L155,100" className="energy-flow flow-battery" />
-            <text className="arrow-text arrow-battery" dy="0.3em">
-              <textPath href="#pathBatteryGrid" startOffset="50%">
-                <animate attributeName="startOffset" from="0%" to="100%" dur={`${getAnimationDuration('pathBatteryGrid', batteryToGridPower)}s`} repeatCount="indefinite" />
-                ›
-              </textPath>
-            </text>
-          </g>
-        )}
+        {/* Static connection lines (subtle background) */}
+        {solarToGrid && <path d="M250,90 L250,70 L155,70" className="conn-line" />}
+        {solarToHome && <path d="M265,148 L265,176 L233,176" className="conn-line" />}
+        {solarToBattery && <path d="M250,135 L175,135 L175,155" className="conn-line" />}
+        {gridToHome && <path d="M190,169 L220,169" className="conn-line" />}
+        {batteryToHome && <path d="M182,187 L220,187" className="conn-line" />}
+        {batteryToGrid && <path d="M170,152 L170,100 L155,100" className="conn-line" />}
       </svg>
+
+      {/* Canvas Energy Flow with Comets */}
+      <EnergyFlowCanvas
+        solarToHome={solarToHome}
+        solarToBattery={solarToBattery}
+        batteryToHome={batteryToHome}
+        gridToHome={gridToHome}
+        solarToGrid={solarToGrid}
+        batteryToGrid={batteryToGrid}
+        solarToHomePower={solarToHomePower}
+        solarToBatteryPower={solarToBatteryPower}
+        solarToGridPower={solarToGridPower}
+        gridToHomePower={gridToHomePower}
+        batteryToHomePower={batteryToHomePower}
+        batteryToGridPower={batteryToGridPower}
+      />
 
       {/* Three.js Canvas Container */}
       <div ref={containerRef} className="w-full h-full" />
