@@ -531,42 +531,61 @@ const SolarHouse3D = ({
 
   return (
     <div className="relative w-full h-full min-h-[280px]" style={{ background: '#2d323d' }}>
-      {/* Labels - 6个标签 */}
-      <div className="absolute top-[10px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Solar</div>
-        <div className="text-[14px] font-semibold text-yellow-400">
-          {solarFormatted.value} <span className="text-[10px] font-normal opacity-85">{solarFormatted.unit}</span>
-        </div>
-      </div>
-      <div className="absolute top-[50px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Grid In</div>
-        <div className="text-[14px] font-semibold text-blue-400">
-          {gridInFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridInFormatted.unit}</span>
-        </div>
-      </div>
-      <div className="absolute top-[90px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Grid Out</div>
-        <div className="text-[14px] font-semibold text-green-400">
-          {gridOutFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridOutFormatted.unit}</span>
-        </div>
-      </div>
-      <div className="absolute top-[140px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Battery Charge</div>
-        <div className="text-[14px] font-semibold text-cyan-400">
-          {chargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{chargeFormatted.unit}</span>
-        </div>
-      </div>
-      <div className="absolute top-[180px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Battery Discharge</div>
-        <div className="text-[14px] font-semibold text-cyan-400">
-          {dischargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{dischargeFormatted.unit}</span>
-        </div>
-      </div>
-      <div className="absolute top-[220px] left-[10px] text-white z-10">
-        <div className="text-[10px] text-white/50">Load</div>
-        <div className="text-[14px] font-semibold text-purple-400">
-          {loadFormatted.value} <span className="text-[10px] font-normal opacity-85">{loadFormatted.unit}</span>
-        </div>
+      {/* Labels - 自动堆叠，不留空位 */}
+      <div className="absolute top-[10px] left-[10px] flex flex-col gap-2 z-10">
+        {solar > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Solar</div>
+            <div className="text-[14px] font-semibold text-yellow-400">
+              {solarFormatted.value} <span className="text-[10px] font-normal opacity-85">{solarFormatted.unit}</span>
+            </div>
+          </div>
+        )}
+        
+        {gridImport > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Grid In</div>
+            <div className="text-[14px] font-semibold text-blue-400">
+              {gridInFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridInFormatted.unit}</span>
+            </div>
+          </div>
+        )}
+        
+        {gridExport > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Grid Out</div>
+            <div className="text-[14px] font-semibold text-green-400">
+              {gridOutFormatted.value} <span className="text-[10px] font-normal opacity-85">{gridOutFormatted.unit}</span>
+            </div>
+          </div>
+        )}
+        
+        {batteryCharge > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Battery Charge</div>
+            <div className="text-[14px] font-semibold text-cyan-400">
+              {chargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{chargeFormatted.unit}</span>
+            </div>
+          </div>
+        )}
+        
+        {batteryDischarge > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Battery Discharge</div>
+            <div className="text-[14px] font-semibold text-cyan-400">
+              {dischargeFormatted.value} <span className="text-[10px] font-normal opacity-85">{dischargeFormatted.unit}</span>
+            </div>
+          </div>
+        )}
+        
+        {load > 0.01 && (
+          <div className="text-white">
+            <div className="text-[10px] text-white/50">Load</div>
+            <div className="text-[14px] font-semibold text-purple-400">
+              {loadFormatted.value} <span className="text-[10px] font-normal opacity-85">{loadFormatted.unit}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SVG Connection Lines - 调整为紧凑版viewBox */}
