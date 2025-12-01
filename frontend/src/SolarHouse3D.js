@@ -13,7 +13,7 @@ const getFlowSpeed = (power) => {
   if (absPower <= 0.01) return 20; // 最慢速度
   const maxPower = 6;
   const minSpeed = 10;  // 最慢：10 像素/秒
-  const maxSpeed = 50; // 最快：50 像素/秒
+  const maxSpeed = 70; // 最快：50 像素/秒
   const ratio = Math.min(absPower / maxPower, 1);
   const speed = minSpeed + ratio * (maxSpeed - minSpeed);
   return speed;

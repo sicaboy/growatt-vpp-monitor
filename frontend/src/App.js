@@ -871,7 +871,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
                 battery_net: totals.battery_charge - totals.battery_discharge,
               }}
               unit="kWh"
-              height={300}
+              height={250}
               instanceId="history"
             />
           </div>
@@ -881,7 +881,7 @@ const StatisticsSection = ({ dailyData, isLoading, startDate, endDate, onStartDa
             <h3 className="text-gray-400 text-xs font-medium mb-1">
               每日能量收支 <span className="text-gray-500">(kWh)</span>
             </h3>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={250}>
               <LineChart data={balanceChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="date" stroke="#9CA3AF" fontSize={11} />
