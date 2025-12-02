@@ -384,6 +384,8 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       // 浅色button背景色 - 混合白色让它更浅
       const baseColor = d3.color(node.color);
       const buttonColor = d3.interpolateRgb(baseColor, "#FFFFFF")(0.5);
+      const buttonColorDark = d3.interpolateRgb(baseColor, "#000000")(0.15);
+      const buttonColorLight = d3.interpolateRgb(baseColor, "#FFFFFF")(0.75);
       
       // 第一行：名称 - 带button背景，在block顶部
       const nameText = node.name;
@@ -392,14 +394,47 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       const nameWidth = Math.min(nameText.length * nameFontSize * 0.6 + labelPadding.x * 2, node.width - 8);
       const nameHeight = nameFontSize + labelPadding.y * 2;
       const nameY = 6 + nameHeight / 2;  // 距离顶部6px
+      const nameX = (node.width - nameWidth) / 2;
       
+      // 为button创建立体渐变
+      const buttonGradientId = `button-gradient-${instanceId}-${node.name.replace(/\s+/g, '-')}`;
+      defs.append("linearGradient")
+        .attr("id", buttonGradientId)
+        .attr("x1", "0%")
+        .attr("x2", "0%")
+        .attr("y1", "0%")
+        .attr("y2", "100%")
+        .selectAll("stop")
+        .data([
+          { offset: "0%", color: buttonColorLight },
+          { offset: "50%", color: buttonColor },
+          { offset: "100%", color: d3.interpolateRgb(baseColor, "#FFFFFF")(0.35) }
+        ])
+        .enter()
+        .append("stop")
+        .attr("offset", d => d.offset)
+        .attr("stop-color", d => d.color);
+      
+      // 阴影（底部深色边）
       nodeG.append("rect")
-        .attr("x", (node.width - nameWidth) / 2)
+        .attr("x", nameX)
+        .attr("y", 7)
+        .attr("width", nameWidth)
+        .attr("height", nameHeight)
+        .attr("rx", labelRadius)
+        .attr("fill", buttonColorDark)
+        .attr("opacity", 0.4);
+      
+      // 主button背景（带渐变）
+      nodeG.append("rect")
+        .attr("x", nameX)
         .attr("y", 6)
         .attr("width", nameWidth)
         .attr("height", nameHeight)
         .attr("rx", labelRadius)
-        .attr("fill", buttonColor);
+        .attr("fill", `url(#${buttonGradientId})`)
+        .attr("stroke", buttonColorLight)
+        .attr("stroke-width", 0.5);
       
       nodeG.append("text")
         .attr("x", node.width / 2)
