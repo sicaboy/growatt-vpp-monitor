@@ -333,13 +333,13 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       const targetTotal = targetFlowTotals[link.target] || link.value;
       const sourceRatio = link.value / sourceTotal;
       const targetRatio = link.value / targetTotal;
-      const sourceWidth = Math.max(2, sourceRatio * (sourceNode.height - 10));
-      const targetWidth = Math.max(2, targetRatio * (targetNode.height - 10));
+      const sourceWidth = Math.max(2, sourceRatio * sourceNode.height);
+      const targetWidth = Math.max(2, targetRatio * targetNode.height);
       
       const x0 = sourceNode.x + sourceNode.width;
-      const y0 = sourceNode.y + nodeSourceOffset[link.source] + sourceWidth / 2 + 5;
+      const y0 = sourceNode.y + nodeSourceOffset[link.source] + sourceWidth / 2;
       const x1 = targetNode.x;
-      const y1 = targetNode.y + nodeTargetOffset[link.target] + targetWidth / 2 + 5;
+      const y1 = targetNode.y + nodeTargetOffset[link.target] + targetWidth / 2;
       const sy0 = y0 - sourceWidth / 2;
       const sy1 = y0 + sourceWidth / 2;
       const ty0 = y1 - targetWidth / 2;
@@ -370,11 +370,42 @@ const SankeyFlow = ({ data, title = "能量流向", unit = "kW", height = 420, i
       const nodeG = g.append("g").attr("transform", `translate(${node.x},${node.y})`);
       const nodeGradientId = `node-gradient-${instanceId}-${node.name.replace(/\s+/g, '-')}`;
       
-      // 节点矩形
-      nodeG.append("rect")
-        .attr("width", node.width)
-        .attr("height", node.height)
-        .attr("rx", 6)
+      // 节点矩形 - 用path绘制自定义圆角
+      // 左侧节点：左边圆角，右边直角
+      // 右侧节点：右边圆角，左边直角
+      const r = 6;  // 圆角半径
+      const w = node.width;
+      const h = node.height;
+      
+      let pathD;
+      if (node.side === "left") {
+        // 左侧节点：左上、左下圆角，右边直角
+        pathD = `
+          M ${r} 0
+          L ${w} 0
+          L ${w} ${h}
+          L ${r} ${h}
+          Q 0 ${h} 0 ${h - r}
+          L 0 ${r}
+          Q 0 0 ${r} 0
+          Z
+        `;
+      } else {
+        // 右侧节点：右上、右下圆角，左边直角
+        pathD = `
+          M 0 0
+          L ${w - r} 0
+          Q ${w} 0 ${w} ${r}
+          L ${w} ${h - r}
+          Q ${w} ${h} ${w - r} ${h}
+          L 0 ${h}
+          L 0 0
+          Z
+        `;
+      }
+      
+      nodeG.append("path")
+        .attr("d", pathD)
         .attr("fill", `url(#${nodeGradientId})`);
       
       // 标题button的样式 - 在block内部靠顶部
