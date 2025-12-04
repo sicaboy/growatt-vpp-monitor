@@ -6,10 +6,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
  * 显示今日ZeroHero VPP预估收益，带财神爷动画效果
  * 
  * 智能刷新策略：
- * - 活跃时段（6am-8pm 或 有export）：每60秒刷新
+ * - 活跃时段（6am-8pm）：每60秒刷新
  * - 非活跃时段：每小时刷新
  * 
- * 动画：财神爷持续跳动，金币持续下落（纯CSS动画，无需用户交互）
+ * 动画：只在活跃时段（6am-8pm）播放财神爷跳动和金币下落
  * 
  * Props:
  * - apiBase: API服务器地址
@@ -18,24 +18,29 @@ const DailyEarnings = ({ apiBase }) => {
   const [earnings, setEarnings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isActive, setIsActive] = useState(false);  // 是否播放动画（收益>0.03时）
   const containerRef = useRef(null);
   const prevEarningsRef = useRef(0);
   const intervalRef = useRef(null);
 
-  // 判断是否在活跃时段
-  const isActiveHours = useCallback(() => {
+  // 判断是否在活跃时段（用于刷新频率）
+  const checkActiveHours = useCallback(() => {
     const hour = new Date().getHours();
-    // 6am - 8pm 是活跃时段（太阳能发电 + ZEROHERO窗口）
     return hour >= 6 && hour < 20;
+  }, []);
+
+  // 判断是否播放动画（收益 > $0.03）
+  const shouldAnimate = useCallback((earningsData) => {
+    return earningsData?.total_earnings > 0.03;
   }, []);
 
   // 获取当前应该使用的刷新间隔
   const getRefreshInterval = useCallback(() => {
-    if (isActiveHours()) {
+    if (checkActiveHours()) {
       return 60 * 1000;  // 活跃时段：1分钟
     }
     return 60 * 60 * 1000;  // 非活跃时段：1小时
-  }, [isActiveHours]);
+  }, [checkActiveHours]);
 
   // 获取收益数据
   const fetchEarnings = useCallback(async () => {
@@ -47,6 +52,7 @@ const DailyEarnings = ({ apiBase }) => {
       prevEarningsRef.current = data.total_earnings;
       
       setEarnings(data);
+      setIsActive(data.total_earnings > 0.03);  // 收益>$0.03时播放动画
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -57,7 +63,6 @@ const DailyEarnings = ({ apiBase }) => {
 
   // 设置智能刷新定时器
   const setupInterval = useCallback(() => {
-    // 清除旧的定时器
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
@@ -65,7 +70,6 @@ const DailyEarnings = ({ apiBase }) => {
     const interval = getRefreshInterval();
     intervalRef.current = setInterval(() => {
       fetchEarnings();
-      // 每次刷新后重新评估间隔（处理跨时段情况）
       setupInterval();
     }, interval);
   }, [fetchEarnings, getRefreshInterval]);
@@ -100,21 +104,21 @@ const DailyEarnings = ({ apiBase }) => {
     
     if (status === 'pending') {
       return (
-        <div className="flex items-center gap-1 text-yellow-400 text-xs">
+        <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs">
           <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
           <span>ZeroHero待定</span>
         </div>
       );
     } else if (status === 'qualified') {
       return (
-        <div className="flex items-center gap-1 text-green-400 text-xs">
+        <div className="flex items-center justify-center gap-1 text-green-400 text-xs">
           <span>✓</span>
           <span>ZeroHero +${credit.toFixed(2)}</span>
         </div>
       );
     } else {
       return (
-        <div className="flex items-center gap-1 text-red-400 text-xs">
+        <div className="flex items-center justify-center gap-1 text-red-400 text-xs">
           <span>✗</span>
           <span>ZeroHero未达标</span>
         </div>
@@ -122,17 +126,39 @@ const DailyEarnings = ({ apiBase }) => {
     }
   };
 
-  // 生成持续下落的金币（使用CSS动画循环）
+  // 显示分时段卖电详情
+  const renderExportDetails = () => {
+    if (!earnings) return null;
+    
+    const superExport = earnings.super_export?.export_kwh || 0;
+    const regularExport = earnings.regular_fit?.export_kwh || 0;
+    
+    return (
+      <div className="text-[10px] text-gray-400 space-y-0.5">
+        <div className="flex justify-between gap-2">
+          <span>⚡ 6-8pm:</span>
+          <span className="text-cyan-400">{superExport.toFixed(2)} kWh</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span>📤 其他:</span>
+          <span className="text-green-400">{regularExport.toFixed(2)} kWh</span>
+        </div>
+      </div>
+    );
+  };
+
+  // 生成持续下落的金币（只在活跃时段显示）
   const renderCoins = () => {
+    if (!isActive) return null;
+    
     const coins = [];
     const emojis = ['🪙', '💰', '✨', '🧧', '💵'];
     
-    // 生成8个金币，错开时间循环下落
     for (let i = 0; i < 8; i++) {
       const emoji = emojis[i % emojis.length];
-      const left = 10 + (i * 11) % 80;  // 分散位置
-      const delay = i * 0.4;  // 错开启动时间
-      const duration = 2.5 + (i % 3) * 0.5;  // 不同速度
+      const left = 10 + (i * 11) % 80;
+      const delay = i * 0.4;
+      const duration = 2.5 + (i % 3) * 0.5;
       
       coins.push(
         <span
@@ -154,7 +180,7 @@ const DailyEarnings = ({ apiBase }) => {
   return (
     <div 
       ref={containerRef}
-      className="relative h-full flex flex-col items-center justify-center overflow-hidden"
+      className="relative h-full flex flex-col items-center justify-center overflow-hidden px-3 py-2"
       style={{
         background: 'linear-gradient(180deg, rgba(139,0,0,0.3) 0%, rgba(45,24,16,0.5) 50%, rgba(26,5,5,0.4) 100%)',
       }}
@@ -171,17 +197,17 @@ const DailyEarnings = ({ apiBase }) => {
           50% { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.7)); }
         }
         
+        @keyframes glow-static {
+          0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.3)); }
+        }
+        
         @keyframes coin-fall-continuous {
           0% { 
             opacity: 0; 
             transform: translateY(-20px) rotate(0deg); 
           }
-          10% {
-            opacity: 1;
-          }
-          90% {
-            opacity: 1;
-          }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
           100% { 
             opacity: 0; 
             transform: translateY(250px) rotate(360deg); 
@@ -199,12 +225,16 @@ const DailyEarnings = ({ apiBase }) => {
           font-size: 16px;
           animation: coin-fall-continuous ease-in-out infinite;
           pointer-events: none;
-          z-index: 10;
+          z-index: 5;
         }
         
         .caishen-animated {
           animation: bounce-continuous 1.2s ease-in-out infinite, 
                      glow-pulse 2s ease-in-out infinite;
+        }
+        
+        .caishen-static {
+          filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.3));
         }
         
         .shimmer-text {
@@ -224,53 +254,53 @@ const DailyEarnings = ({ apiBase }) => {
         }
       `}</style>
       
-      {/* 持续下落的金币 */}
+      {/* 持续下落的金币（只在活跃时段） */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {renderCoins()}
       </div>
       
       {/* 标题 */}
-      <div className="text-center mb-1 z-20">
+      <div className="text-center z-20">
         <span className="text-xs text-yellow-500/80 tracking-wider">今日预估收益</span>
       </div>
       
-      {/* 财神爷图片 - 持续动画 */}
-      <div className="relative z-10 caishen-animated">
+      {/* 财神爷图片 - 只在活跃时段播放动画 */}
+      <div className={`relative z-10 ${isActive ? 'caishen-animated' : 'caishen-static'}`}>
         <img 
           src="/caishen2_transparent.png" 
           alt="财神爷"
-          className="w-24 h-auto"
+          className="w-20 h-auto"
         />
       </div>
       
       {/* 收益金额 */}
-      <div className="text-center mt-2 z-20">
+      <div className="text-center z-20">
         {loading ? (
           <div className="text-2xl text-yellow-400">...</div>
         ) : error ? (
           <div className="text-sm text-red-400">{error}</div>
         ) : (
           <>
-            <div className={`text-3xl font-bold ${earnings?.total_earnings > 0 ? 'shimmer-text' : 'text-yellow-400'}`}>
+            <div className={`text-2xl font-bold ${earnings?.total_earnings > 0 ? 'shimmer-text' : 'text-yellow-400'}`}>
               {formatCurrency(earnings?.total_earnings)}
             </div>
             
             {/* ZEROHERO状态 */}
-            <div className="mt-1">
+            <div className="mt-0.5">
               {renderZeroHeroStatus()}
             </div>
             
-            {/* Export信息 */}
-            <div className="text-xs text-gray-400 mt-1">
-              Export: {earnings?.total_export_kwh?.toFixed(2) || 0} kWh
+            {/* 分时段卖电详情 */}
+            <div className="mt-1">
+              {renderExportDetails()}
             </div>
           </>
         )}
       </div>
       
       {/* 免责声明 */}
-      <div className="absolute bottom-1 left-0 right-0 text-center z-20">
-        <p className="text-[9px] text-gray-500 px-2">
+      <div className="text-center z-20 mt-1">
+        <p className="text-[9px] text-gray-500">
           💡 预估收益仅供参考，以电力公司账单为准
         </p>
       </div>
