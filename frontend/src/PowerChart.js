@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // ============================================================
@@ -24,39 +24,392 @@ const SectionTitle = ({ icon, title, subtitle }) => (
 );
 
 // ============================================================
-// 模块三：曲线图
+// 工具函数
 // ============================================================
-const PowerChart = ({ historicalData, startDate, endDate }) => {
-  const dateRangeText = startDate === endDate ? startDate : `${startDate} ~ ${endDate}`;
+const formatDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// 采样间隔选项（分钟）
+const SAMPLE_INTERVALS = [
+  { value: 1, label: '1分钟' },
+  { value: 2, label: '2分钟' },
+  { value: 5, label: '5分钟' },
+  { value: 10, label: '10分钟' },
+];
+
+// ============================================================
+// 模块三：功率曲线（自动获取最近24小时数据，可选采样间隔）
+// ============================================================
+const PowerChart = ({ apiBase }) => {
+  // 原始数据
+  const [rawData, setRawData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  
+  // 采样间隔（分钟）
+  const [sampleInterval, setSampleInterval] = useState(5);
+  
+  // 动态计算 MAX_POINTS：24小时 = 1440分钟
+  const MAX_POINTS = Math.floor(1440 / sampleInterval);
+  const MIN_POINTS = 20;
+  
+  // 缩放状态：显示的数据点数量
+  const [visiblePoints, setVisiblePoints] = useState(MIN_POINTS);
+  
+  // 滚动相关
+  const SCROLL_THRESHOLD = 50; // 超过50个点启用滚动
+  const scrollContainerRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  
+  // 鼠标/触摸拖动处理
+  const handleMouseDown = (e) => {
+    if (!scrollContainerRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX || e.touches?.[0]?.pageX);
+    setScrollLeft(scrollContainerRef.current?.scrollLeft || 0);
+  };
+  
+  const handleMouseMove = (e) => {
+    if (!isDragging || !scrollContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX || e.touches?.[0]?.pageX;
+    const walk = (startX - x) * 1.5;
+    scrollContainerRef.current.scrollLeft = scrollLeft + walk;
+  };
+  
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 获取最近24小时的数据
+  const fetchData = useCallback(async () => {
+    try {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const todayStr = formatDate(now);
+      const yesterdayStr = formatDate(yesterday);
+      
+      const response = await fetch(`${apiBase}/api/history/range?start_date=${yesterdayStr}&end_date=${todayStr}&limit=5000`);
+      if (!response.ok) throw new Error('获取数据失败');
+      const result = await response.json();
+      
+      if (result.data && result.data.length > 0) {
+        // 只保留最近24小时的数据
+        const cutoffTime = now.getTime() - 24 * 60 * 60 * 1000;
+        const recentData = result.data.filter(d => new Date(d.timestamp).getTime() >= cutoffTime);
+        setRawData(recentData);
+        setLastUpdate(now);
+      }
+    } catch (err) {
+      console.error('Failed to fetch power chart data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiBase]);
+
+  // 初始加载 + 每5分钟刷新
+  useEffect(() => {
+    fetchData();
+    
+    // 计算到下一个5分钟整点的时间
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const seconds = now.getSeconds();
+    const msToNext5Min = ((5 - (minutes % 5)) * 60 - seconds) * 1000;
+    
+    // 先等到下一个5分钟整点，然后每5分钟刷新
+    const timeout = setTimeout(() => {
+      fetchData();
+      const interval = setInterval(fetchData, 5 * 60 * 1000);
+      return () => clearInterval(interval);
+    }, msToNext5Min);
+    
+    return () => clearTimeout(timeout);
+  }, [fetchData]);
+
+  // 按选定间隔采样处理
+  const sampledData = useMemo(() => {
+    if (!rawData || rawData.length === 0) return [];
+    
+    // 按N分钟时间桶聚合
+    const buckets = new Map();
+    
+    rawData.forEach(d => {
+      const date = new Date(d.timestamp);
+      const hour = date.getHours();
+      const minute = date.getMinutes();
+      
+      // 向下取整到采样间隔
+      const roundedMinute = Math.floor(minute / sampleInterval) * sampleInterval;
+      
+      // 生成桶的key：包含日期和时间
+      const bucketKey = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(roundedMinute).padStart(2, '0')}`;
+      
+      // 每个时间桶只取第一个数据点
+      if (!buckets.has(bucketKey)) {
+        buckets.set(bucketKey, {
+          time: bucketKey,
+          timestamp: date.getTime(),
+          solar: d.solar,
+          load: d.load,
+          battery: d.battery_net,
+          grid: d.grid_export - d.grid_import
+        });
+      }
+    });
+    
+    // 转换为数组并按时间排序
+    const result = Array.from(buckets.values());
+    result.sort((a, b) => a.timestamp - b.timestamp);
+    return result;
+  }, [rawData, sampleInterval]);
+
+  // 根据缩放级别显示的数据（从最新数据往前取）
+  const displayData = useMemo(() => {
+    if (sampledData.length === 0) return [];
+    if (sampledData.length <= visiblePoints) {
+      return sampledData;
+    }
+    // 显示最新的 N 个数据点
+    return sampledData.slice(-visiblePoints);
+  }, [sampledData, visiblePoints]);
+
+  // 是否启用滚动模式
+  const needsScroll = displayData.length > SCROLL_THRESHOLD;
+  
+  // 计算滚动模式下的图表宽度：确保比容器宽，每个数据点至少20px
+  // 最小宽度1200px，保证一定能滚动
+  const chartWidth = needsScroll ? Math.max(displayData.length * 20, 1200) : null;
+  
+  // 数据变化时滚动到最右端（最新数据）
+  useEffect(() => {
+    if (needsScroll && scrollContainerRef.current) {
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+        }
+      }, 100);
+    }
+  }, [displayData, needsScroll]);
+
+  // 计算当前显示的时间范围
+  const getTimeRangeText = () => {
+    if (displayData.length === 0) return '';
+    const firstTime = displayData[0]?.time || '';
+    const lastTime = displayData[displayData.length - 1]?.time || '';
+    // 只取时间部分
+    const firstHM = firstTime.split(' ')[1] || firstTime;
+    const lastHM = lastTime.split(' ')[1] || lastTime;
+    return `${firstHM} - ${lastHM}`;
+  };
 
   return (
     <SectionContainer>
-      <SectionTitle 
-        icon="📈" 
-        title="功率曲线" 
-        subtitle={`时间范围: ${dateRangeText} | 数据点: ${historicalData.length}`}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+        <div>
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <span className="text-xl">📈</span>
+            <span>功率曲线</span>
+          </h2>
+          <p className="text-gray-400 text-xs">
+            最近24小时 | 显示: {displayData.length}/{sampledData.length} 点
+            {lastUpdate ? ` | 更新: ${lastUpdate.toLocaleTimeString('zh-CN')}` : ''}
+          </p>
+        </div>
+        
+        {/* 采样间隔选择器 */}
+        <div className="flex items-center gap-2">
+          <span className="text-gray-400 text-xs">采样:</span>
+          <select
+            value={sampleInterval}
+            onChange={(e) => {
+              setSampleInterval(Number(e.target.value));
+              setVisiblePoints(MIN_POINTS); // 重置显示点数
+            }}
+            className="bg-gray-700 text-white text-xs px-2 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none cursor-pointer"
+          >
+            {SAMPLE_INTERVALS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-      {historicalData.length === 0 ? (
+      {loading ? (
+        <div className="text-gray-400 text-center py-12">加载中...</div>
+      ) : sampledData.length === 0 ? (
         <div className="text-gray-400 text-center py-12">暂无数据</div>
       ) : (
         <div className="bg-gray-800/50 rounded-xl p-4">
-          <ResponsiveContainer width="100%" height={350}>
-            <LineChart data={historicalData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="time" stroke="#9CA3AF" fontSize={11} />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
-                labelStyle={{ color: '#F3F4F6' }}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="solar" stroke="#FCD34D" strokeWidth={2} dot={false} name="Solar (kW)" />
-              <Line type="monotone" dataKey="load" stroke="#A78BFA" strokeWidth={2} dot={false} name="Load (kW)" />
-              <Line type="monotone" dataKey="battery" stroke="#22D3EE" strokeWidth={2} dot={false} name="Battery (kW)" />
-              <Line type="monotone" dataKey="grid" stroke="#60A5FA" strokeWidth={2} dot={false} name="Grid (kW)" />
-            </LineChart>
-          </ResponsiveContainer>
+          {/* 缩放滑块 - 只在数据点足够多时显示 */}
+          {sampledData.length > MIN_POINTS ? (
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-gray-400 text-xs whitespace-nowrap">时间范围</span>
+              <div className="flex-1 flex items-center gap-2">
+                <span className="text-gray-500 text-xs">近</span>
+                <input
+                  type="range"
+                  min={MIN_POINTS}
+                  max={sampledData.length}
+                  value={visiblePoints}
+                  onChange={(e) => setVisiblePoints(Number(e.target.value))}
+                  className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer
+                    [&::-webkit-slider-thumb]:appearance-none
+                    [&::-webkit-slider-thumb]:w-4
+                    [&::-webkit-slider-thumb]:h-4
+                    [&::-webkit-slider-thumb]:rounded-full
+                    [&::-webkit-slider-thumb]:bg-blue-500
+                    [&::-webkit-slider-thumb]:cursor-pointer
+                    [&::-webkit-slider-thumb]:hover:bg-blue-400
+                    [&::-moz-range-thumb]:w-4
+                    [&::-moz-range-thumb]:h-4
+                    [&::-moz-range-thumb]:rounded-full
+                    [&::-moz-range-thumb]:bg-blue-500
+                    [&::-moz-range-thumb]:border-0
+                    [&::-moz-range-thumb]:cursor-pointer"
+                />
+                <span className="text-gray-500 text-xs">远</span>
+              </div>
+              <span className="text-gray-400 text-xs whitespace-nowrap">{getTimeRangeText()}</span>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-xs mb-3">
+              {getTimeRangeText()} (数据点: {sampledData.length})
+            </div>
+          )}
+          
+          {/* 滚动提示 */}
+          {needsScroll && (
+            <div className="text-gray-400 text-xs mb-2 flex items-center gap-1">
+              <span>👆</span>
+              <span>左右拖动查看更多数据</span>
+            </div>
+          )}
+          
+          {/* 图表容器 */}
+          {needsScroll ? (
+            // 滚动模式：Y轴固定，图表内容可滚动
+            <div className="flex">
+              {/* 固定的Y轴 */}
+              <div className="flex-shrink-0 w-[50px]">
+                <svg width="50" height={350}>
+                  {/* 计算Y轴范围 */}
+                  {(() => {
+                    const allValues = displayData.flatMap(d => [d.solar, d.load, d.battery, d.grid]);
+                    const minVal = Math.floor(Math.min(...allValues));
+                    const maxVal = Math.ceil(Math.max(...allValues));
+                    const range = maxVal - minVal || 1;
+                    const step = range / 5;
+                    const ticks = [];
+                    for (let i = 0; i <= 5; i++) {
+                      ticks.push(minVal + step * i);
+                    }
+                    const chartTop = 10;
+                    const chartBottom = 330;
+                    const chartHeight = chartBottom - chartTop;
+                    
+                    return (
+                      <g>
+                        {/* Y轴线 */}
+                        <line x1="49" y1={chartTop} x2="49" y2={chartBottom} stroke="#9CA3AF" strokeWidth="1" />
+                        {/* Y轴刻度 */}
+                        {ticks.map((tick, i) => {
+                          const y = chartBottom - (tick - minVal) / range * chartHeight;
+                          return (
+                            <g key={i}>
+                              <line x1="44" y1={y} x2="49" y2={y} stroke="#9CA3AF" strokeWidth="1" />
+                              <text x="42" y={y + 4} fill="#9CA3AF" fontSize="10" textAnchor="end">
+                                {tick.toFixed(1)}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  })()}
+                </svg>
+              </div>
+              
+              {/* 可滚动的图表内容 */}
+              <div 
+                ref={scrollContainerRef}
+                className="flex-1 overflow-x-auto cursor-grab active:cursor-grabbing"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleMouseDown}
+                onTouchMove={handleMouseMove}
+                onTouchEnd={handleMouseUp}
+                style={{ 
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#4B5563 #1F2937'
+                }}
+              >
+                <LineChart 
+                  data={displayData} 
+                  width={chartWidth} 
+                  height={350}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#9CA3AF" 
+                    fontSize={10}
+                    interval={Math.floor(displayData.length / 20)}
+                    tickFormatter={(value) => {
+                      const match = value.match(/(\d{1,2}:\d{2})/);
+                      return match ? match[1] : value;
+                    }}
+                  />
+                  <YAxis stroke="#9CA3AF" hide={true} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                    labelStyle={{ color: '#F3F4F6' }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="solar" stroke="#FCD34D" strokeWidth={2} dot={false} name="Solar (kW)" />
+                  <Line type="monotone" dataKey="load" stroke="#A78BFA" strokeWidth={2} dot={false} name="Load (kW)" />
+                  <Line type="monotone" dataKey="battery" stroke="#22D3EE" strokeWidth={2} dot={false} name="Battery (kW)" />
+                  <Line type="monotone" dataKey="grid" stroke="#60A5FA" strokeWidth={2} dot={false} name="Grid (kW)" />
+                </LineChart>
+              </div>
+            </div>
+          ) : (
+            // 正常模式：响应式宽度
+            <ResponsiveContainer width="100%" height={350}>
+              <LineChart data={displayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis 
+                  dataKey="time" 
+                  stroke="#9CA3AF" 
+                  fontSize={10}
+                  interval="preserveStartEnd"
+                  tickFormatter={(value) => {
+                    const match = value.match(/(\d{1,2}:\d{2})/);
+                    return match ? match[1] : value;
+                  }}
+                />
+                <YAxis stroke="#9CA3AF" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px' }}
+                  labelStyle={{ color: '#F3F4F6' }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="solar" stroke="#FCD34D" strokeWidth={2} dot={false} name="Solar (kW)" />
+                <Line type="monotone" dataKey="load" stroke="#A78BFA" strokeWidth={2} dot={false} name="Load (kW)" />
+                <Line type="monotone" dataKey="battery" stroke="#22D3EE" strokeWidth={2} dot={false} name="Battery (kW)" />
+                <Line type="monotone" dataKey="grid" stroke="#60A5FA" strokeWidth={2} dot={false} name="Grid (kW)" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       )}
     </SectionContainer>

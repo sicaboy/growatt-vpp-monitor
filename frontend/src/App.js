@@ -584,11 +584,7 @@ function App() {
         />
 
         {/* 模块三：曲线图 */}
-        <PowerChart 
-          historicalData={historicalData}
-          startDate={startDate}
-          endDate={endDate}
-        />
+        <PowerChart apiBase={API_BASE} />
 
         {/* 模块四：电池电量曲线 */}
         <BatterySOCChart 
