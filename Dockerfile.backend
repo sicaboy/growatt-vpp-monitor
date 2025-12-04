@@ -1,19 +1,19 @@
-# 使用官方 Python 镜像
+# Use official Python image
 FROM python:3.9-slim
 
-# 设置工作目录
+# Set working directory
 WORKDIR /app
 
-# 安装依赖
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码和配置文件
+# Copy backend code and configuration file
 COPY src/ ./src/
 COPY config.json.sample ./config.json
 
-# 暴露端口
+# Expose port
 EXPOSE 5002
 
-# 启动 API 服务器
+# Start API server
 CMD ["python3", "src/api_server.py"]
