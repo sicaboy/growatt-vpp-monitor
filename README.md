@@ -34,7 +34,7 @@ This project is fully containerized and can be run easily using Docker Compose.
 
 Inverter Model: SPH 3000-6000 TL-HUB (6000KW for my setup)
 Battery: ALP 5.0L-E1 (50kwh for my setup)
-Solar pannel: 6.6 KW
+Solar panel: 6.6 KW
 
 Python version: 3.10
 
